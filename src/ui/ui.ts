@@ -1,3 +1,5 @@
+import type { DropReport } from '../sim/report'
+
 export interface BallCard {
   id: string
   name: string
@@ -101,6 +103,7 @@ export interface HudModel {
   overdriveReady: boolean
   encounter?: EncounterModel | null
   coach?: CoachModel | null
+  practice?: boolean
 }
 
 export interface SummaryModel {
@@ -123,6 +126,19 @@ export interface SummaryModel {
   ascension: number
   clears: number
   commissions: number
+  debrief?: DropReport
+}
+
+export interface LabModel {
+  machines: { id: string; name: string; text: string; selected: boolean }[]
+  spheres: { id: string; name: string; selected: boolean }[]
+  builds: { id: string; name: string; text: string; selected: boolean }[]
+  seed: string
+  matched: boolean
+  title: string
+  description: string
+  best?: { earned: number; combo: number; objective: string }
+  attempt: number
 }
 
 export interface RouteItem {
@@ -143,13 +159,15 @@ export type StageModel =
   | { kind: 'repair'; text: string; action: string }
   | { kind: 'bargain'; canShell: boolean; canPay: boolean }
   | { kind: 'resolve'; title: string; sub: string; earned: number; tone: 'good' | 'bad' | 'gold' }
-  | { kind: 'pause' }
+  | { kind: 'pause'; practice?: boolean }
+  | { kind: 'laboratory'; lab: LabModel }
+  | { kind: 'practice-result'; report: DropReport; attempt: number; best: number; comparison: number | null }
   | { kind: 'runend'; summary: SummaryModel }
   | { kind: 'reveal'; name: string; text: string; tags: string }
   | { kind: 'event'; title: string; story: string; cards: ChoiceCard[] }
   | { kind: 'victory'; circuit: number; score: number; build: string }
   | { kind: 'history'; records: { seed: string; sphere: string; score: number; drops: number; clears: number; mode: string; date: string; index: number; trial: number; build: string }[] }
-  | { kind: 'journal'; title: string; stats: string; commissions: { name: string; text: string; value: number; target: number; done: boolean }[]; relics: CollItem[]; upgrades: CollItem[]; synergies: CollItem[]; route: RouteItem[]; encounter?: EncounterModel | null }
+  | { kind: 'journal'; title: string; stats: string; commissions: { name: string; text: string; value: number; target: number; done: boolean }[]; relics: CollItem[]; upgrades: CollItem[]; synergies: CollItem[]; route: RouteItem[]; encounter?: EncounterModel | null; practice?: boolean }
 
 export interface ViewModel {
   sig: string
@@ -276,11 +294,22 @@ export class UI {
       if (root.dataset.playfield !== playfield) root.dataset.playfield = playfield
       const encounter = view.hud?.encounter ? 'true' : 'false'
       if (root.dataset.encounter !== encounter) root.dataset.encounter = encounter
+      const practice = view.hud?.practice ? 'true' : 'false'
+      if (root.dataset.practice !== practice) root.dataset.practice = practice
     }
     if (view.sig !== this.sig) {
       const prevKind = this.stage.dataset.kind
+      const refreshLab = prevKind === 'laboratory' && view.stage.kind === 'laboratory'
+      const labScroll = refreshLab ? this.stage.querySelector<HTMLElement>('.laboratory')?.scrollTop ?? 0 : 0
+      const focusedAction = refreshLab && document.activeElement instanceof HTMLElement && this.stage.contains(document.activeElement)
+        ? document.activeElement.dataset.act : undefined
       this.sig = view.sig
       this.stage.innerHTML = stageHtml(view.stage)
+      if (refreshLab) {
+        const lab = this.stage.querySelector<HTMLElement>('.laboratory')
+        if (lab) lab.scrollTop = labScroll
+        if (focusedAction) Array.from(this.stage.querySelectorAll<HTMLElement>('[data-act]')).find(el => el.dataset.act === focusedAction)?.focus({ preventScroll: true })
+      }
       if (['choices', 'fork', 'shop', 'event', 'bargain', 'repair', 'victory'].includes(view.stage.kind)) this.stage.insertAdjacentHTML('beforeend', '<button class="ghost decision-journal" data-act="journal">Build & route <kbd>J</kbd></button>')
       this.stage.className = view.stage.kind === 'none' ? '' : 'open'
       this.stage.dataset.kind = view.stage.kind
@@ -338,9 +367,10 @@ export class UI {
       this.prev = {}
       delete this.hud.dataset.encounter
       delete this.hud.dataset.coach
+      delete this.hud.dataset.practice
       return
     }
-    const key = `${hud.aiming}|${hud.overview}|${hud.playing}|${hud.showFlip}|${hud.maxSpecials}|${hud.maxTilts}|${hud.maxNudges}|${hud.core}|${hud.jackpot}`
+    const key = `${hud.aiming}|${hud.overview}|${hud.playing}|${hud.showFlip}|${hud.maxSpecials}|${hud.maxTilts}|${hud.maxNudges}|${hud.core}|${hud.jackpot}|${!!hud.practice}`
     if (key !== this.hudKey) {
       this.hudKey = key
       this.prev = {}
@@ -380,6 +410,7 @@ export class UI {
           </div>
           ${encounterHtml('desktop')}
         </div>
+        ${hud.practice ? '<div class="practice-toolbar" aria-label="Practice controls"><span>Practice</span><button class="ghost" data-act="lab-retry">Restart</button><button class="ghost" data-act="lab-configure">Configure</button><button class="ghost practice-journal" data-act="journal">Journal</button></div>' : ''}
         <div class="mobile-place"><b data-hud="mobile-title"></b><span data-hud="mobile-status"></span>${encounterHtml('mobile')}${coachHtml('mobile')}</div>
         <div class="tally" data-hud="tally"><span>This drop</span><b data-hud="earned"></b></div>
         <button class="mobile-journal ghost" data-act="journal" aria-label="Open build and route journal">◇ Journal</button>
@@ -450,6 +481,8 @@ export class UI {
     const coachState = hud.coach ? 'true' : 'false'
     if (this.hud.dataset.encounter !== encounterState) this.hud.dataset.encounter = encounterState
     if (this.hud.dataset.coach !== coachState) this.hud.dataset.coach = coachState
+    const practiceState = hud.practice ? 'true' : 'false'
+    if (this.hud.dataset.practice !== practiceState) this.hud.dataset.practice = practiceState
     for (const variant of ['desktop', 'mobile']) {
       const encounter = q(`${variant}-encounter`) as HTMLElement | null
       if (encounter) {
@@ -459,7 +492,7 @@ export class UI {
       if (hud.encounter) {
         const e = hud.encounter
         set(`${variant}-encounter-title`, e.title)
-        set(`${variant}-encounter-instruction`, e.complete ? 'Bounty secured' : e.instruction)
+        set(`${variant}-encounter-instruction`, e.complete ? hud.practice ? 'Practice objective complete' : 'Bounty secured' : e.instruction)
         set(`${variant}-encounter-count`, `${Math.min(e.progress, e.target)} / ${e.target}`)
         set(`${variant}-encounter-reward`, e.reward)
         set(`${variant}-encounter-returns`, `${e.returns}/${e.maxReturns} safe return${e.maxReturns === 1 ? '' : 's'}`)
@@ -591,8 +624,37 @@ function coachHtml(variant: string): string {
   return `<aside class="workshop-coach ${variant}-coach" data-hud="${variant}-coach" hidden aria-label="Workshop tips" aria-live="polite" aria-atomic="true"><div class="coach-heading"><span data-hud="${variant}-coach-step"></span><b data-hud="${variant}-coach-title"></b><button class="coach-dismiss" data-act="coach-dismiss" aria-label="Dismiss Workshop tips"><span aria-hidden="true">×</span></button></div><p data-hud="${variant}-coach-text"></p></aside>`
 }
 
-function encounterBriefing(e: EncounterModel): string {
-  return `<section class="guardian-briefing ${e.complete ? 'complete' : ''}"><div><p class="eyebrow">Optional guardian / Current machine</p><h3>${esc(e.title)}</h3><strong>${esc(e.complete ? 'Bounty secured' : e.instruction)}</strong></div><div class="guardian-briefing-progress"><span class="encounter-sequence" aria-hidden="true">${encounterSequence(e)}</span><b>${Math.min(e.progress, e.target)} / ${e.target}</b></div><p>${esc(e.hint)}</p><div class="guardian-terms"><span><b>Bounty</b>${esc(e.reward)}</span><span><b>Safety reserve</b>${e.returns} of ${e.maxReturns} safe return${e.maxReturns === 1 ? '' : 's'} remaining</span></div><p class="quiet">Once per machine, entering a safe collector before 75 seconds returns the sphere while an unfinished objective keeps its progress. Gutters still follow normal hazard rules. After the return is spent or its time window expires, collectors settle the drop normally. The bounty is optional: an incomplete objective never blocks the normal route.</p></section>`
+function encounterBriefing(e: EncounterModel, practice = false): string {
+  return `<section class="guardian-briefing ${e.complete ? 'complete' : ''}"><div><p class="eyebrow">${practice ? 'Practice guardian' : 'Optional guardian'} / Current machine</p><h3>${esc(e.title)}</h3><strong>${esc(e.complete ? practice ? 'Practice objective complete' : 'Bounty secured' : e.instruction)}</strong></div><div class="guardian-briefing-progress"><span class="encounter-sequence" aria-hidden="true">${encounterSequence(e)}</span><b>${Math.min(e.progress, e.target)} / ${e.target}</b></div><p>${esc(e.hint)}</p><div class="guardian-terms"><span><b>${practice ? 'Objective' : 'Bounty'}</b>${esc(e.reward)}</span><span><b>Safety reserve</b>${e.returns} of ${e.maxReturns} safe return${e.maxReturns === 1 ? '' : 's'} remaining</span></div><p class="quiet">Once per machine, entering a safe collector before 75 seconds returns the sphere while an unfinished objective keeps its progress. Gutters still follow normal hazard rules. After the return is spent or its time window expires, collectors settle the drop normally. ${practice ? 'Practice records the objective without awarding expedition rewards.' : 'The bounty is optional: an incomplete objective never blocks the normal route.'}</p></section>`
+}
+
+/** Each miniature describes the machine selected in the laboratory. */
+function machineSchematic(id: string): string {
+  const pegs = Array.from({ length: 16 }, (_, i) => `<circle cx="${22 + (i % 4) * 22 + (Math.floor(i / 4) % 2) * 7}" cy="${41 + Math.floor(i / 4) * 21}" r="2" fill="currentColor" opacity=".6"/>`).join('')
+  const drawings: Record<string, string> = {
+    workshop: `<path d="M27 38h66M28 49l15 18m50-18L78 67M28 94l18-17m47 17L78 77"/>${pegs}`,
+    garden: '<path d="M29 101V52m15 38V35m32 55V35m15 66V52M29 70C5 50 42 46 29 70Zm15-16C20 31 60 29 44 54Zm32 0c-24-23 16-25 0 0Zm15 16c-24-20 13-24 0 0Z"/><circle cx="60" cy="72" r="11"/><path d="M55 72h10m-5-5v10"/>',
+    furnace: '<path d="M29 93V46h62v47M38 93V62h44v31m-44-40h44M45 99c-14-10-7-23 2-30-3 14 7 15 5 26m13 4c-14-10-7-23 2-30-3 14 7 15 5 26M39 37v-8m21 8V24m21 13v-8"/>',
+    press: '<path d="M31 29h58v16H31zm10 17v27m38-27v27M28 73h64v14H28zm8 27h48M44 87v13m32-13v13M55 21h10m-5-7v7"/><circle cx="60" cy="59" r="5"/>',
+    bellkeeper: '<path d="M20 79h22l-3-6V58a8 8 0 0 0-16 0v15l-3 6Zm29-27h22l-3-6V31a8 8 0 0 0-16 0v15l-3 6Zm29 27h22l-3-6V58a8 8 0 0 0-16 0v15l-3 6ZM28 86h6m23-27h6m23 27h6"/><path d="m32 94 28-25 28 25" opacity=".4"/>',
+    heartforge: '<path d="M24 36h24v14H24zm48 0h24v14H72zM30 50v29m12-29v29m36-29v29m12-29v29M22 79h28v15H22zm48 0h28v15H70zM49 43h22m-22 43h22"/><path d="m56 38-5 5 5 5m8 33 5 5-5 5"/><text x="36" y="31" text-anchor="middle" fill="currentColor" stroke="none" font-size="9">I</text><text x="84" y="31" text-anchor="middle" fill="currentColor" stroke="none" font-size="9">II</text>',
+    gravity: '<circle cx="60" cy="64" r="13"/><ellipse cx="60" cy="64" rx="38" ry="15" transform="rotate(-30 60 64)"/><ellipse cx="60" cy="64" rx="38" ry="15" transform="rotate(50 60 64)" opacity=".45"/><circle cx="85" cy="40" r="4" fill="currentColor"/><path d="M60 22v11m0 62v11M18 64h11m62 0h11"/>',
+    grinder: '<circle cx="60" cy="64" r="28"/><circle cx="60" cy="64" r="12"/><path d="M60 27v9m0 56v9M23 64h9m56 0h9M34 38l7 7m38 38 7 7M34 90l7-7m38-38 7-7m-30 9 9 17-9 17-9-17 9-17Z"/>',
+  }
+  return `<svg class="machine-schematic" viewBox="0 0 120 128" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 15h92v99H14zM14 105h92M54 15v9h12v-9" opacity=".28"/><path d="M9 9h13m-13 0v13m102-13H98m13 0v13M9 119h13m-13 0v-13m102 13H98m13 0v-13" opacity=".25"/>${drawings[id] ?? drawings.workshop}<path d="M21 109h19m10 0h19m10 0h19" opacity=".55"/></svg>`
+}
+
+function laboratoryHtml(lab: LabModel): string {
+  const machine = lab.machines.find(m => m.selected) ?? lab.machines[0]
+  const sphereColors: Record<string, [string, string, string]> = {
+    rubber: ['#f6c382', '#a55a3d', '#381c25'], prism: ['#c3fff0', '#3b9b98', '#102c48'], void: ['#c8b6f8', '#615b92', '#0b1022'],
+  }
+  return `<article class="plaque laboratory wide scroll"><header class="lab-header"><div><p class="eyebrow">The laboratory / Practice</p><h2>Turn a near miss<br>into <em>muscle memory.</em></h2><p>Study a machine. Change one thing. Drop again.</p></div><button class="ghost" data-act="lab-exit">Return to hub</button></header><div class="lab-workbench"><section class="lab-machine-section"><div class="lab-section-title"><span>01 / Select a machine</span><b>${lab.machines.length.toString().padStart(2, '0')} blueprints</b></div><div class="lab-machines">${lab.machines.map((m, i) => `<button class="lab-machine ${m.selected ? 'selected' : ''}" data-act="lab-machine:${esc(m.id)}" aria-pressed="${m.selected}"><span class="lab-machine-number">0${i + 1}</span>${machineSchematic(m.id)}<strong>${esc(m.name)}</strong><span class="lab-machine-description">${esc(m.text)}</span><i class="lab-selected-mark" aria-hidden="true">${m.selected ? '✓' : '+'}</i></button>`).join('')}</div><p class="lab-promise"><span aria-hidden="true">◇</span> Experiment freely. Practice keeps your expedition, shards, unlocks, and records intact.</p></section><aside class="lab-calibration"><div class="lab-section-title"><span>02 / Calibrate your fall</span><b>SESSION ONLY</b></div><div class="lab-current-machine">${machineSchematic(machine?.id ?? 'workshop')}<div><span>Current objective</span><h3>${esc(lab.title)}</h3><p>${esc(lab.description)}</p></div></div>${lab.matched ? '<p class="lab-matched"><span aria-hidden="true">↳</span> Matched to your last machine: its seed, sphere, and installed build.</p>' : ''}<fieldset class="lab-sphere-field"><legend>Sphere</legend><div class="lab-spheres">${lab.spheres.map(s => `<button class="lab-sphere ${s.selected ? 'selected' : ''}" data-act="lab-sphere:${esc(s.id)}" aria-pressed="${s.selected}">${orb(sphereColors[s.id] ?? sphereColors.rubber)}<span>${esc(s.name)}</span></button>`).join('')}</div></fieldset><fieldset class="lab-build-field"><legend>Loadout</legend><div class="lab-builds">${lab.builds.map(b => `<button class="lab-build ${b.selected ? 'selected' : ''}" data-act="lab-build:${esc(b.id)}" aria-pressed="${b.selected}"><strong>${esc(b.name)}</strong><span>${esc(b.text)}</span><i aria-hidden="true">${b.selected ? '✓' : '+'}</i></button>`).join('')}</div></fieldset><div class="lab-seed"><span>Machine frequency</span><code>${esc(lab.seed)}</code></div>${lab.best ? `<div class="lab-best"><span>Best on this setup / This session</span><b>${lab.best.earned.toLocaleString()} <small>gears</small></b><p>${lab.best.combo} peak combo${lab.best.objective ? ` · ${esc(lab.best.objective)}` : ''}</p></div>` : ''}<button class="primary lab-start" data-act="lab-start"><span>${lab.attempt > 0 ? 'Launch another attempt' : 'Launch practice'}<small>Same machine. Your next move.</small></span><i aria-hidden="true">↘</i></button></aside></div></article>`
+}
+
+/** Only facts recorded by the simulation appear in this panel. */
+function dropReportHtml(report: DropReport): string {
+  return `<section class="drop-report" data-outcome="${esc(report.outcome)}" aria-label="Fall analysis"><div class="drop-report-heading"><div><p class="eyebrow">Fall analysis / Recorded fall</p><h3>${esc(report.title)}</h3></div><span class="report-stamp" aria-hidden="true">RECORDED<br>FALL</span></div><p class="report-detail">${esc(report.detail)}</p><dl class="report-metrics"><div><dt>Gears earned</dt><dd data-report="earned">${report.earned.toLocaleString()}</dd></div><div><dt>Time in machine</dt><dd data-report="elapsed">${report.elapsed.toFixed(1)}<small>s</small></dd></div><div><dt>Peak combo</dt><dd data-report="combo">${report.peakCombo}</dd></div></dl>${report.objective ? `<div class="report-objective ${report.objective.complete ? 'complete' : ''}"><span>${esc(report.objective.name)}</span><strong>${report.objective.progress} / ${report.objective.required} <small>${report.objective.complete ? 'Complete' : 'Incomplete'}</small></strong></div>` : ''}<div class="report-observations"><section class="report-damage"><h4>Shell damage</h4>${report.damage.length ? `<ol>${report.damage.map(d => `<li data-report="damage"><time>${d.time.toFixed(1)}s</time><span>${esc(d.cause)}</span><b>−${d.amount}</b></li>`).join('')}</ol>` : '<p class="report-empty" data-report="damage">No shell damage recorded.</p>'}</section><section class="report-resources"><h4>Control usage</h4><ul>${report.resources.map(r => `<li data-report="resource"><span>${esc(r.label)}</span><strong>${r.used} used<small>${r.remaining} left</small></strong></li>`).join('')}</ul></section></div><div class="report-advice"><span aria-hidden="true">↗</span><div><h4>Try on your next fall</h4><p data-report="advice">${esc(report.advice)}</p></div></div></section>`
 }
 
 function stageHtml(stage: StageModel): string {
@@ -601,6 +663,12 @@ function stageHtml(stage: StageModel): string {
       return ''
     case 'hub':
       return hubHtml(stage)
+    case 'laboratory':
+      return laboratoryHtml(stage.lab)
+    case 'practice-result': {
+      const difference = stage.comparison == null ? 'First recorded attempt on this setup' : `${stage.comparison > 0 ? '+' : ''}${stage.comparison.toLocaleString()} gears versus your previous attempt`
+      return `<article class="plaque practice-result wide scroll"><div class="lab-result-heading"><div><p class="eyebrow">Practice / Attempt ${stage.attempt.toString().padStart(2, '0')}</p><h2>Read the fall.<br><em>Make the next one yours.</em></h2></div><span class="lab-result-seal" aria-hidden="true">${artifactArt('compass')}</span></div><div class="practice-comparison"><strong>Best this session <b>${stage.best.toLocaleString()}</b></strong><span>${esc(difference)}</span></div>${dropReportHtml(stage.report)}<div class="row practice-result-actions"><button class="primary" data-act="lab-retry">Retry this machine <kbd>Enter</kbd></button><button class="ghost" data-act="lab-configure">Configure practice</button><button class="texty" data-act="lab-exit">Return to hub</button></div><p class="practice-isolation">Practice attempts stay in this session. Expedition progress, shards, unlocks, and records are preserved.</p></article>`
+    }
     case 'help':
       return `<article class="plaque wide scroll briefing"><div class="briefing-header"><div><p class="eyebrow">Operator's field guide</p><h2>Chance gives you a line.<br><em>Control makes it yours.</em></h2></div><div class="briefing-emblem" aria-hidden="true">${artifactArt('compass')}</div></div><div class="briefing-grid"><section><span class="briefing-number">01 / RELEASE</span><h3>Find your opening.</h3><p>Aim with the mouse or <kbd>←</kbd><kbd>→</kbd>. Click, tap Release Sphere, or press <kbd>Enter</kbd>. Pegs pay gears; gold increases your multiplier. The hot center pocket pays a jackpot. Press <kbd>V</kbd> or Inspect Machine before release to study every hazard, lane, and pocket.</p></section><section><span class="briefing-number">02 / INTERVENE</span><h3>Spend control wisely.</h3><p><kbd>A</kbd><kbd>D</kbd> nudge left or right. <kbd>Space</kbd> uses your sphere's trick. <kbd>Q</kbd> tilts gravity when available. <kbd>F</kbd> flips the gate once. Limited charges reset each machine.</p></section><section class="drive-briefing"><span class="briefing-number">03 / OVERDRIVE</span><h3>Make your moment.</h3><p>Hit five different pegs to charge <kbd>E</kbd>. Overdrive lifts the sphere, doubles payouts, and holds the combo for three seconds. Two activations per fall. Time it before a rich lane.</p></section><section><span class="briefing-number">04 / BUILD</span><h3>Turn luck into a machine.</h3><p>Draft a starting relic. Add relics and upgrades between falls. Two matching tags awaken a resonance; three forge a stronger one. Open <kbd>J</kbd> to inspect your build, commissions, and connected route.</p></section></div><div class="briefing-notes"><p><b>Keep your shell.</b> Gutters and spikes cost integrity. Benches at the end of Acts I and II fully repair it. Completed commissions award gears, 1 shell if you survive, and 4 shards at the end.</p><p><b>Meet the guardians.</b> The Bellkeeper asks you to ring three bells. Heartforge asks you to alternate relays I and II. These bounties are optional. Before 75 seconds, one safe collector return gives an unfinished objective another chance; gutters still hurt. Your route continues even if the bounty is incomplete.</p><p><b>Break the Helix.</b> The Grinder needs five core hits. A missed pocket costs 1 shell and returns you to the fight. Win to bank the run or carry your build into a harder circuit.</p><p><b>Come back to your machine.</b> Expeditions save between machines. A reload replays the current drop from its launch. Daily constellations share a fixed sphere, full archive, and UTC seed. Bests and progress live on this device.</p></div><div class="row"><button class="primary" data-act="back">Ready to descend</button><button class="ghost" data-act="coach-enable">Show Workshop tips again</button></div></article>`
     case 'collection':
@@ -698,13 +766,13 @@ function stageHtml(stage: StageModel): string {
     case 'pause':
       return `
         <article class="plaque narrow pause-plaque">
-          <div class="pause-orbit" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">Transmission suspended</p>
+          <div class="pause-orbit" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">${stage.practice ? 'Practice / Machine suspended' : 'Transmission suspended'}</p>
           <h2>The sphere waits</h2>
           <div class="col">
             <button class="primary" data-act="resume">Resume</button>
             <button class="ghost" data-act="settings">Settings</button>
-            <button class="ghost" data-act="journal">Build & route journal <kbd>J</kbd></button>
-            <button class="ghost danger" data-act="abandon">Abandon this fall</button>
+            <button class="ghost" data-act="journal">${stage.practice ? 'Practice journal' : 'Build & route journal'} <kbd>J</kbd></button>
+            ${stage.practice ? '<button class="ghost" data-act="lab-retry">Restart this machine</button><button class="ghost" data-act="lab-configure">Configure practice</button><button class="texty" data-act="lab-exit">Leave practice</button>' : '<button class="ghost danger" data-act="abandon">Abandon this fall</button>'}
           </div>
         </article>`
     case 'runend': {
@@ -741,6 +809,7 @@ function stageHtml(stage: StageModel): string {
             <button class="texty" data-act="copy-result">Copy result</button>
             <button class="texty" data-act="hub">Hub</button>
           </div>
+          ${s.debrief ? `<button class="ghost practice-last" data-act="practice-last"><span>Practice the last machine</span><small>Repeat its seed, sphere, and build in the laboratory ↗</small></button>${dropReportHtml(s.debrief)}` : ''}
         </article>`
     }
     case 'reveal':
@@ -823,6 +892,7 @@ function hubHtml(stage: Extract<StageModel, { kind: 'hub' }>): string {
       <button class="${stage.resume ? 'ghost secondary-launch' : 'primary big'} launch-button" data-act="start"><span>${stage.shared ? 'Play shared challenge' : stage.resume ? 'Start a new expedition' : 'Begin the descent'}${stage.resume ? '' : '<small>Choose a relic. Make a little chaos.</small>'}</span><i aria-hidden="true">↘</i>${stage.resume ? '' : '<kbd>Enter</kbd>'}</button>
       <div class="run-calibration"><div class="seed-row"><label class="seed"><span>Frequency / seed</span><input data-seed value="${esc(stage.seed)}" maxlength="12" spellcheck="false" placeholder="Let fate decide" aria-label="Run seed" /></label><button class="texty" data-act="random-seed" aria-label="Randomize seed" title="Randomize seed">↻</button></div><div class="trial-select"><span>Mastery trial <b>${stage.trial.toString().padStart(2, '0')}</b><small> / ${stage.maxTrial.toString().padStart(2, '0')}</small></span><div><button class="ghost" data-act="trial-down" aria-label="Lower trial" ${stage.trial <= 0 ? 'disabled' : ''}>−</button><button class="ghost" data-act="trial-up" aria-label="Raise trial" ${stage.trial >= stage.maxTrial ? 'disabled' : ''}>+</button></div></div><p class="trial-copy">${esc(stage.trialText)}</p>${stage.legacy ? '<p class="legacy-route">Classic route · relay guardians disabled</p>' : ''}</div>
       <button class="daily-card" data-act="daily"><span class="daily-orbit" aria-hidden="true">${helixMark()}</span><span class="daily-copy"><span>Daily constellation <small>${esc(stage.dailyDate)} · UTC</small></span><b>${esc(stage.dailySphere)}</b><em>${stage.dailyBest ? `Best ${stage.dailyBest.toLocaleString()} · fall again` : 'One seed. One sphere. A new story every day.'}</em></span><i aria-hidden="true">↗</i></button>
+      <button class="laboratory-entry" data-act="laboratory"><span class="laboratory-entry-icon" aria-hidden="true">${artifactArt('compass')}</span><span><b>Practice laboratory</b><small>Choose a machine. Refine your next fall.</small></span><i aria-hidden="true">↗</i></button>
     </aside>
     <section class="hub-balls"><div class="section-label"><p class="eyebrow">01 / Select your heart</p><span>Three ways to bend the odds.</span></div><div class="ball-row">${stage.balls.map(ballHtml).join('')}</div></section>
     <footer class="hub-foot"><div><span>Shards</span><b>${stage.shards}</b></div><div><span>Best score</span><b>${stage.best.toLocaleString()}</b></div><div><span>Expeditions</span><b>${stage.runs}</b></div><button class="${stage.canStudy ? 'primary' : 'ghost'}" data-act="study" ${stage.canStudy ? '' : 'disabled'}>${esc(stage.study)}</button></footer>
@@ -835,7 +905,7 @@ function helixMark(): string {
 
 function specimenAssembly(ball: BallCard, number: number): string {
   const ticks = Array.from({ length: 48 }, (_, i) => `<path d="M200 ${i % 4 === 0 ? 17 : 24}v${i % 4 === 0 ? 13 : 5}" transform="rotate(${i * 7.5} 200 200)"/>`).join('')
-  return `<div class="hero-apparatus specimen-${esc(ball.id)}" aria-hidden="true" style="--oa:${ball.colors[0]};--ob:${ball.colors[1]};--oc:${ball.colors[2]}"><div class="apparatus-glow"></div><svg class="orbital-instrument" viewBox="0 0 400 400" fill="none"><g class="instrument-ticks" stroke="currentColor" opacity=".6">${ticks}</g><circle cx="200" cy="200" r="164" stroke="currentColor" opacity=".22"/><circle cx="200" cy="200" r="155" stroke="currentColor" opacity=".13" stroke-dasharray="1 9"/><g class="orbital-orbit"><ellipse cx="200" cy="200" rx="187" ry="76" stroke="currentColor" opacity=".5" transform="rotate(-35 200 200)"/><circle cx="353" cy="93" r="4" fill="currentColor"/><path d="M15 200h27m316 0h27M200 15v27m0 316v27" stroke="currentColor"/></g><path d="M80 61h34M61 80v34m259-53h-34m53 19v34M80 339h34m-53-19v-34m259 53h-34m53-19v-34" stroke="currentColor" opacity=".4"/></svg><div class="gravity-sphere"><i class="sphere-contour"></i><i class="sphere-sheen"></i><i class="sphere-heart"></i></div><span class="instrument-number">0${number}</span><span class="instrument-label">MASS / UNDEFINED</span></div>`
+  return `<div class="hero-apparatus specimen-${esc(ball.id)}" aria-hidden="true" style="--oa:${ball.colors[0]};--ob:${ball.colors[1]};--oc:${ball.colors[2]}"><div class="apparatus-glow"></div><svg class="orbital-instrument" viewBox="0 0 400 400" fill="none"><g class="instrument-ticks" stroke="currentColor" opacity=".6">${ticks}</g><circle cx="200" cy="200" r="164" stroke="currentColor" opacity=".22"/><circle cx="200" cy="200" r="155" stroke="currentColor" opacity=".13" stroke-dasharray="1 9"/><g class="orbital-orbit"><ellipse cx="200" cy="200" rx="187" ry="76" stroke="currentColor" opacity=".5" transform="rotate(-35 200 200)"/><circle cx="353" cy="93" r="4" fill="currentColor"/><path d="M15 200h27m316 0h27M200 15v27m0 316v27" stroke="currentColor"/></g><path d="M80 61h34M61 80v34m259-53h-34m53 19v34M80 339h34m-53-19v-34m259 53h-34m53-19v-34" stroke="currentColor" opacity=".4"/></svg><div class="gravity-sphere"><i class="sphere-contour"></i><i class="sphere-sheen"></i><i class="sphere-heart"></i></div><span class="instrument-number">0${number}</span><span class="instrument-label">STATE / READY TO FALL</span></div>`
 }
 
 function artifactKind(name: string, tags = ''): string {
@@ -891,7 +961,9 @@ function forkHtml(stage: Extract<StageModel, { kind: 'fork' }>): string {
 }
 
 function journalHtml(stage: Extract<StageModel, { kind: 'journal' }>): string {
-  return `<article class="plaque journal wide scroll"><div class="journal-head"><div><p class="eyebrow">The expedition journal</p><h2>${esc(stage.title)}</h2><p class="quiet">${esc(stage.stats)}</p></div><button class="ghost" data-act="close-journal">Return <kbd>J</kbd></button></div>${stage.encounter ? encounterBriefing(stage.encounter) : ''}<h3>Commissions</h3><p class="quiet">Complete a commission for gears, 1 shell if you survive, and 4 shards at the end.</p><div class="commissions">${stage.commissions.map(c => `<div class="commission ${c.done ? 'complete' : ''}"><span class="commission-seal" aria-hidden="true">${c.done ? '✓' : '◇'}</span><b>${esc(c.name)}</b><p>${esc(c.text)}</p><progress max="${c.target}" value="${Math.min(c.target, c.value)}" aria-label="${esc(c.name)}"></progress><span>${Math.min(c.target, c.value)}/${c.target}${c.done ? ' · Paid' : ''}</span></div>`).join('')}</div><div class="journal-inventory"><section>${block('Relics', stage.relics)}</section><section>${block('Upgrades', stage.upgrades)}</section></div>${block('Resonances · two tags awaken, three forge', stage.synergies)}<div class="route-heading"><div><p class="eyebrow">Navigation / Three acts</p><h3>Your constellation</h3></div><p class="quiet">Follow the connected paths. Select a station to inspect it.<br><span class="route-legend"><i></i> Current <i></i> Visited <i></i> Ahead</span></p></div><div class="route-map">${[1, 2, 3].map(act => routeAct(stage.route, act)).join('')}</div><button class="primary" data-act="close-journal">Return to the expedition</button></article>`
+  const commissions = stage.practice ? '<p class="practice-journal-note">Practice / Current machine. This fall earns no expedition rewards or progression.</p>' : `<h3>Commissions</h3><p class="quiet">Complete a commission for gears, 1 shell if you survive, and 4 shards at the end.</p><div class="commissions">${stage.commissions.map(c => `<div class="commission ${c.done ? 'complete' : ''}"><span class="commission-seal" aria-hidden="true">${c.done ? '✓' : '◇'}</span><b>${esc(c.name)}</b><p>${esc(c.text)}</p><progress max="${c.target}" value="${Math.min(c.target, c.value)}" aria-label="${esc(c.name)}"></progress><span>${Math.min(c.target, c.value)}/${c.target}${c.done ? ' · Paid' : ''}</span></div>`).join('')}</div>`
+  const route = stage.practice ? '' : `<div class="route-heading"><div><p class="eyebrow">Navigation / Three acts</p><h3>Your constellation</h3></div><p class="quiet">Follow the connected paths. Select a station to inspect it.<br><span class="route-legend"><i></i> Current <i></i> Visited <i></i> Ahead</span></p></div><div class="route-map">${[1, 2, 3].map(act => routeAct(stage.route, act)).join('')}</div>`
+  return `<article class="plaque journal wide scroll"><div class="journal-head"><div><p class="eyebrow">${stage.practice ? 'The practice journal' : 'The expedition journal'}</p><h2>${esc(stage.title)}</h2><p class="quiet">${esc(stage.stats)}</p></div><button class="ghost" data-act="close-journal">Return <kbd>J</kbd></button></div>${stage.encounter ? encounterBriefing(stage.encounter, stage.practice) : ''}${commissions}<div class="journal-inventory"><section>${block('Relics', stage.relics)}</section><section>${block('Upgrades', stage.upgrades)}</section></div>${block('Resonances · two tags awaken, three forge', stage.synergies)}${route}<button class="primary" data-act="close-journal">Return to ${stage.practice ? 'practice' : 'the expedition'}</button></article>`
 }
 
 function routeAct(all: RouteItem[], act: number): string {

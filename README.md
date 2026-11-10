@@ -2,6 +2,14 @@
 
 A pachinko roguelite. The sphere falls through a living machine. You cannot hold it. You can still decide the fall.
 
+## Read the fall · v0.1
+
+Open **Practice laboratory** from the hub to practice eight machines, including both guardians and the Grinder. Try any of the three spheres with a stock, control, or Arc & Rudder loadout. The machine stays seeded between attempts, controls retain their normal finite reserves, and results compare your gears with the previous attempt and session best. Practice preserves your saved expedition and archive; its scores and unlocks do not enter progression.
+
+The final fall of a completed expedition now has a **fall analysis**: the actual landing or loss, shell damage with timestamps, peak combo, time, and accepted control usage. Refunds do not hide an intervention, blocked inputs do not count as uses, and shields do not become false damage. Advice refers to the observed objective and remaining controls.
+
+Choose **Practice the last machine** from that analysis to repeat its exact board, sphere, installed build, starting shell, trial, circuit, and rules version. Changing a selector returns to a standard practice setup. Session comparisons reset when the setup changes, and practice results disappear on reload. An abandoned live fall is not labeled as a death or given a fabricated completed-fall analysis.
+
 ## Relay guardians · v0.4
 
 Two optional physical objectives now change the problem inside existing machines:
@@ -57,9 +65,9 @@ npm run verify:visuals
 npm run verify:browser
 ```
 
-`npm test` checks relic mechanics and accounting, Overdrive, guardian contacts and finite returns, generated routes and anomalous physics, and DOM/controller flows including full expeditions with every sphere. Each suite can also be run through `verify:builds`, `verify:momentum`, `verify:encounters`, `verify:routes`, or `verify:expeditions`. These tests are deterministic and run offline.
+`npm test` checks relic mechanics and accounting, Overdrive, guardian contacts and finite returns, factual reports, generated routes and anomalous physics, and DOM/controller flows including full expeditions and isolated practice with every sphere. Each suite can also be run through `verify:builds`, `verify:momentum`, `verify:encounters`, `verify:reports`, `verify:routes`, or `verify:expeditions`. These tests are deterministic and run offline.
 
-`npm run verify:browser` runs Playwright in desktop Chromium, touch-emulated phone/tablet Chromium, and desktop Firefox. It tests real clicks and taps, seeded physical charging, guardian progress and earned relic drafts, Workshop coaching, classic challenge compatibility, pause/resume, checkpoints, decision screens, large type, reduced motion, cooldowns, and layout fit. It writes screenshots to `artifacts/browser/` and an HTML report to `artifacts/playwright-report/`. Run `npx playwright install chromium firefox` once if the required browsers are not installed. Mobile emulation complements physical-device testing. The final v0.4 run passes all **40 browser scenarios**; the production build, 32 expedition integration checks, 12 guardian checks across 720 falls, and 112 Canvas renders also pass.
+`npm run verify:browser` runs Playwright in desktop Chromium, touch-emulated phone/tablet Chromium, and desktop Firefox. It tests real clicks and taps, seeded physical charging, guardian progress and earned relic drafts, Workshop coaching, classic challenge compatibility, pause/resume, checkpoints, decision screens, large type, reduced motion, cooldowns, and layout fit. Laboratory checks add real falls, identical retries, complete storage preservation, locked-sphere practice, calibration scroll/focus, factual reports, matched last-machine replay, and voluntary abandonment without a fabricated death report. It writes screenshots to `artifacts/browser/` and an HTML report to `artifacts/playwright-report/`. Run `npx playwright install chromium firefox` once if the required browsers are not installed. Mobile emulation complements physical-device testing. The v0.1 run passes all **56 browser scenarios**; the production build, 35 expedition integration checks, 15 report checks, 12 guardian checks across 720 falls, and 112 Canvas renders also pass.
 
 Set `PLUMB_TEST_LIGHT=1` when memory is constrained to omit trace and video recording. Screenshots, browser profiles, and assertions stay the same.
 

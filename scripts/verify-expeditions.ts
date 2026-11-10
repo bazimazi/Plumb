@@ -7,6 +7,7 @@ import { COMMISSIONS, challengeUrl, dailyExpedition, readCheckpoint } from '../s
 import { loadSave, writeSave, type SaveData } from '../src/meta/save'
 import { RESEARCH_ORDER, TUNING } from '../src/tuning'
 import { Drop } from '../src/sim/drop'
+import { PRACTICE_MACHINES } from '../src/game/laboratory'
 
 const SAVE_KEY = 'plumb-save-v1'
 const CHECKPOINT_KEY = 'plumb-expedition-v2'
@@ -1037,6 +1038,122 @@ await check('three full physical expeditions traverse real rooms, ending legitim
   }
   assert.ok(victories >= 1, 'at least one complete seeded expedition earns a real five-hit boss victory')
   assert.equal(resumedCircuit, true)
+})
+
+await check('all laboratory machines and spheres finish real falls without changing an expedition or archive', () => {
+  let f = begin({ save: { runs: 4, shards: 97, bestScore: 4567, coachingComplete: false } })
+  const savedRun = localStorage.getItem(CHECKPOINT_KEY)!
+  const savedArchive = localStorage.getItem(SAVE_KEY)!
+  const nodeId = f.game.run.nodeId
+  f = fixture({ checkpoint: savedRun, rawSave: savedArchive })
+  const memory = JSON.stringify(f.game.save)
+  click(f, 'laboratory')
+  for (const machine of PRACTICE_MACHINES) for (const ball of Object.keys(BALLS)) {
+    click(f, `lab-machine:${machine.id}`)
+    click(f, `lab-sphere:${ball}`)
+    click(f, 'lab-build:control')
+    click(f, 'lab-start')
+    assert.equal(f.game.screen, 'aim')
+    assert.equal(f.game.run.ballId, ball)
+    press(f, 'Enter')
+    press(f, 'KeyD')
+    for (let tick = 0; tick < 120 * 260 && f.game.screen === 'drop'; tick++) f.game.fixed(TUNING.dt)
+    assert.equal(f.game.screen, 'practice-result', `${machine.id}/${ball} settles into a practice report`)
+    assert.ok(f.game.practice.result.elapsed > 0)
+    assert.equal(f.game.practice.result.resources.find((r: any) => r.label === 'Nudges').used, 1)
+    assert.equal(f.game.run.drops, 0, 'practice never counts as an expedition machine')
+    assert.equal(JSON.stringify(f.game.save), memory, 'in-memory archive remains unchanged')
+    assert.equal(localStorage.getItem(SAVE_KEY), savedArchive)
+    assert.equal(localStorage.getItem(CHECKPOINT_KEY), savedRun)
+    click(f, 'lab-configure')
+  }
+  click(f, 'lab-exit')
+  click(f, 'continue-run')
+  assert.equal(f.game.screen, 'aim')
+  assert.equal(f.game.run.nodeId, nodeId)
+  assert.equal(localStorage.getItem(CHECKPOINT_KEY), savedRun)
+})
+
+await check('matched practice recreates exact daily/trial/circuit boards, build, and starting shell', () => {
+  for (const rules of [2, 3]) {
+    const f = begin({ url: `https://plumb.test/?seed=DAY20261024&rules=${rules}&sphere=rubber&daily=1` })
+    const g = f.game
+    g.run.ascension = 6
+    g.run.loop = 2
+    g.run.upgrades = ['capacitor', 'plumb-line', 'shock-absorber']
+    g.run.relics = ['golden-rudder', 'arc-coil']
+    g.recompute()
+    g.run.integrity = 1
+    g.enterNode('dynamo')
+    const board = JSON.stringify(g.drop.board)
+    const profile = JSON.stringify(g.drop.profile)
+    const source = structuredClone(g.lastMachine)
+    press(f, 'Enter')
+    for (let tick = 0; tick < 120 * 260 && g.screen === 'drop'; tick++) g.fixed(TUNING.dt)
+    assert.equal(g.screen, 'resolve')
+    g.endRun(false)
+    render(f)
+    assert.ok(g.summary.debrief)
+    const archive = localStorage.getItem(SAVE_KEY)
+    const memory = JSON.stringify(g.save)
+    click(f, 'practice-last')
+    assert.deepEqual(g.practice.recipe, source)
+    click(f, 'lab-start')
+    assert.equal(JSON.stringify(g.drop.board), board)
+    assert.equal(JSON.stringify(g.drop.profile), profile)
+    assert.equal(g.drop.integrity, 1)
+    assert.equal(g.drop.time, 0)
+    assert.equal(g.drop.earned, 0)
+    click(f, 'lab-retry')
+    assert.equal(JSON.stringify(g.drop.board), board)
+    assert.equal(JSON.stringify(g.drop.profile), profile)
+    assert.equal(g.drop.integrity, 1)
+    assert.equal(JSON.stringify(g.save), memory)
+    assert.equal(localStorage.getItem(SAVE_KEY), archive)
+    assert.equal(readCheckpoint(), null)
+  }
+})
+
+await check('laboratory restart, journal, settings, and exit preserve their isolated state', () => {
+  const f = fixture({ save: { runs: 0, coachingComplete: false } })
+  click(f, 'laboratory')
+  click(f, 'lab-sphere:void')
+  click(f, 'lab-build:resonance')
+  click(f, 'lab-start')
+  const recipe = structuredClone(f.game.practice.recipe)
+  press(f, 'Enter')
+  reactorReady(f)
+  press(f, 'KeyD')
+  press(f, 'KeyE')
+  consumeControl(f)
+  assert.equal(f.game.save.coachingComplete, false)
+  const at = f.game.drop.time
+  click(f, 'pause-btn')
+  click(f, 'journal')
+  assert.equal(f.game.stage().practice, true)
+  assert.equal(f.game.stage().commissions.length, 0)
+  assert.equal(f.game.stage().route.length, 1)
+  for (let tick = 0; tick < 500; tick++) f.game.fixed(TUNING.dt)
+  assert.equal(f.game.drop.time, at)
+  click(f, 'close-journal')
+  click(f, 'settings')
+  click(f, 'back')
+  assert.equal(f.game.screen, 'pause')
+  click(f, 'lab-retry')
+  assert.deepEqual(f.game.practice.recipe, recipe)
+  assert.equal(f.game.drop.time, 0)
+  assert.equal(f.game.drop.integrity, recipe.integrity)
+  assert.equal(f.game.drop.nudges, f.game.drop.maxNudges)
+  click(f, 'lab-configure')
+  click(f, 'lab-build:stock')
+  assert.equal(f.game.practice.attempt, 0)
+  assert.equal(f.game.practice.best, null)
+  click(f, 'lab-exit')
+  assert.equal(f.game.practice, null)
+  assert.equal(f.game.run, null)
+  assert.equal(f.game.save.runs, 0)
+  assert.deepEqual(f.game.save.balls, ['rubber'])
+  assert.equal(readCheckpoint(), null)
 })
 
 for (const window of windows) await window.happyDOM.close()

@@ -36,6 +36,12 @@ export interface SimEvent {
   big?: boolean
 }
 
+export interface DropDamage {
+  time: number
+  cause: 'spike' | 'gutter' | 'grinder-miss'
+  amount: number
+}
+
 const EMPTY: Cmd = { nudge: 0, flip: false, special: false, tilt: false, aimX: 0 }
 
 export class Drop {
@@ -48,6 +54,17 @@ export class Drop {
   mult = 1
   combo = 0
   comboTimer = 0
+  /** Observations only: no simulation decision depends on these diagnostics. */
+  peakCombo = 0
+  nudgeUses = 0
+  flipUses = 0
+  trickUses = 0
+  tiltUses = 0
+  readonly initialIntegrity: number
+  damageHistory: DropDamage[] = []
+  terminalReason: 'timeout' | 'invalid-state' | null = null
+  /** Original final pocket, before a shield can convert its payout. */
+  landingKind: BinKind | null = null
   /** Normalized reactor charge, built by distinct physical peg contacts. */
   charge = 0
   overdriveTime = 0
@@ -150,6 +167,7 @@ export class Drop {
     this.tilts = profile.tiltCharges
     this.shields = profile.hazardShields
     this.integrity = integrity
+    this.initialIntegrity = integrity
     this.integrityMax = integrityMax
     this.gapT = board.gapStart
     this.gapTarget = board.gapStart
@@ -271,8 +289,9 @@ export class Drop {
     // Boss progress resets its clock; a stalled life costs shell before returning.
     if (!this.dead && !this.captured) {
       if (this.board.boss && !this.wonBoss && this.time - this.bossProgressAt >= 25) {
-        this.bossMiss()
+        this.bossMiss('timeout')
       } else if (this.time >= 80 && (!this.board.boss || this.wonBoss)) {
+        this.terminalReason = 'timeout'
         this.finishCapture(this.binAt(this.ball.x))
       }
     }
@@ -285,12 +304,14 @@ export class Drop {
     }
     if (!Number.isFinite(this.ball.x) || !Number.isFinite(this.ball.y)) {
       this.finishCapture(this.binAt(this.board.w / 2))
+      if (this.captured || this.dead) this.terminalReason = 'invalid-state'
     }
   }
 
   private applyCmd(cmd: Cmd): void {
     if (cmd.nudge && this.nudgeCd <= 0 && this.nudges > 0) {
       this.nudges -= 1
+      this.nudgeUses += 1
       this.nudgeCd = 0.32
       const kick = TUNING.nudgeSpeed * this.profile.nudgeScale * cmd.nudge
       this.ball.vx += kick
@@ -299,6 +320,7 @@ export class Drop {
     }
     if (cmd.flip && this.flips > 0 && this.board.shutterY != null) {
       this.flips -= 1
+      this.flipUses += 1
       this.flipped = true
       this.gapTarget = this.gapTarget > 0.5 ? 0 : 1
       this.events.push({ type: 'flip', x: this.ball.x, y: this.board.shutterY })
@@ -310,6 +332,7 @@ export class Drop {
     if (cmd.special && this.specialCd <= 0 && this.specials > 0) {
       if (this.profile.special === 'rebound') {
         this.specials -= 1
+        this.trickUses += 1
         this.specialCd = 0.35
         this.armedRebound = true
         this.events.push({ type: 'special', x: this.ball.x, y: this.ball.y, text: 'REBOUND' })
@@ -317,6 +340,7 @@ export class Drop {
         const id = this.findCrit()
         if (id >= 0) {
           this.specials -= 1
+          this.trickUses += 1
           this.specialCd = 0.35
           this.critPeg = id
           this.critT = 2.5
@@ -327,6 +351,7 @@ export class Drop {
     }
     if ((cmd.tilt || (cmd.special && this.profile.special === 'tilt')) && this.specialCd <= 0 && this.tilts > 0) {
       this.tilts -= 1
+      this.tiltUses += 1
       this.specialCd = 0.4
       this.tiltT = this.profile.tiltDuration
       this.tiltDir = Math.sign(cmd.aimX - this.ball.x) || this.tiltDir || 1
@@ -743,6 +768,7 @@ export class Drop {
   private bumpCombo(): void {
     if (this.comboTimer > 0) this.combo += 1
     else this.combo = 1
+    this.peakCombo = Math.max(this.peakCombo, this.combo)
     this.comboTimer = this.profile.comboWindow
     this.events.push({ type: 'combo', x: this.ball.x, y: this.ball.y, combo: this.combo })
     if (this.profile.arcEvery && this.combo % this.profile.arcEvery === 0) this.arc()
@@ -836,6 +862,7 @@ export class Drop {
             this.combo = 0
             this.comboTimer = 0
             this.integrity -= 1
+            this.recordDamage('spike')
           }
           const nx = (ball.x - z.x) / (d || 1)
           const ny = (ball.y - z.y) / (d || 1)
@@ -1005,12 +1032,14 @@ export class Drop {
       this.recirculate()
       return
     }
+    this.landingKind = kind
     const resolved = kind === 'hazard' && this.consumeShield(x, y) ? 'coin' : kind
     this.captured = resolved
     this.endOverdrive()
     if (resolved === 'hazard') {
       this.hazardThis += 1
       this.integrity -= 1
+      this.recordDamage('gutter')
       this.events.push({ type: 'pocket', x, y, text: 'GUTTER', gears: 0 })
       if (this.integrity <= 0) this.dead = true
     } else if (resolved === 'coin') {
@@ -1067,9 +1096,16 @@ export class Drop {
     this.events.push({ type: 'recirculate', x: this.ball.x, y: this.ball.y, text: 'RECIRCULATE · FINAL PASS', big: true })
   }
 
-  private bossMiss(): void {
+  private recordDamage(cause: DropDamage['cause'], amount = 1): void {
+    this.damageHistory.push({ time: this.time, cause, amount })
+    if (this.damageHistory.length > 100) this.damageHistory.shift()
+  }
+
+  private bossMiss(reason: 'landing' | 'timeout' = 'landing'): void {
     if (this.captured || this.dead || this.wonBoss) return
+    const before = this.integrity
     this.integrity = Math.max(0, this.integrity - 1)
+    if (this.integrity < before) this.recordDamage('grinder-miss', before - this.integrity)
     this.hazardThis += 1
     this.combo = 0
     this.comboTimer = 0
@@ -1077,6 +1113,7 @@ export class Drop {
     this.coreCd = 0
     this.goldRefundT = 0
     if (this.integrity <= 0) {
+      if (reason === 'timeout') this.terminalReason = 'timeout'
       this.captured = 'hazard'
       this.dead = true
       this.endOverdrive()

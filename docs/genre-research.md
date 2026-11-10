@@ -1,6 +1,6 @@
 # PLUMB: genre research and product direction
 
-Research date: **23 October 2026**. Implementation status updated **24 October 2026** for v0.4. This is a design evidence brief, not a forecast of commercial success. Virality cannot be guaranteed. Recommendations below are original proposals for PLUMB; competitor mechanics, art, characters, names, and presentation are reference material, not assets to reproduce.
+Research date: **23 October 2026**. Implementation status updated **24 October 2026** for v0.1. This is a design evidence brief, not a forecast of commercial success. Virality cannot be guaranteed. Recommendations below are original proposals for PLUMB; competitor mechanics, art, characters, names, and presentation are reference material, not assets to reproduce.
 
 ## What the current game makes possible
 
@@ -10,7 +10,7 @@ Inspection of the initial `README.md`, `src/content/catalog.ts`, `src/game/route
 
 **Priority hypothesis:** increase the number of interesting builds and decisions a player can discover across runs; preserve a clear, satisfying end to each run. Additional minutes of passive bouncing are a poor substitute for meaningful replayability.
 
-## Implemented through v0.4
+## Implemented through v0.1
 
 The implementation now addresses the central recommendations with concrete, inspectable systems:
 
@@ -29,7 +29,9 @@ This mapping comes from source inspection, not an external audience study. Regre
 
 The v0.4 guardian pass applies the optional-objective recommendation without adding machines or requiring every objective for progression. One automatic safe return is available only while the objective is incomplete, before 75 seconds of simulation time. It preserves progress and resources without refilling them or awarding a landing payout. Hazard gutters cannot trigger it, including when shielded. Flat bounties prevent Overdrive/economy multiplication, and the risky Bellkeeper kiln retains its original surviving relic instead of adding a second draft. The guardian suite passes 12 checks and 720 actual falls; all 40 Playwright scenarios pass, including natural guardian clears through the earned relic draft. See [implementation and validation notes](expedition-design.md) for exact behavior, evidence limits, and compatibility boundaries.
 
-The next validation work is focused: observe whether Workshop coaching teaches intentional interventions, whether guardian credit and safe-return limits are understood, voluntary second runs, actual run duration, difficulty by sphere, readable item interactions, interruption recovery, and keyboard/touch behavior on real devices. A specific loss debrief and practice laboratory remain proposals. Remapping, global score validation, localization, a creator-ready demo, and launch assets remain separate work. No measured retention, sales, launch-readiness, or viral outcome is claimed.
+The v0.1 learning pass adds factual completed-fall analysis and an isolated practice laboratory. Reports distinguish shell-damage sources, actual accepted controls, objective progress, remaining reserves, and timeout settlement. Eight practice setups, three spheres, and three loadouts reuse the real simulation. A completed expedition can reproduce its last machine with the same board, build, starting shell, trial, circuit, and rules. Comparisons are session-only and practice preserves both the archive and expedition checkpoint. These implement the earlier proposals without introducing login rewards or increasing campaign length. Verification passes 56 Playwright scenarios, 35 controller integration checks, and 15 report checks; the report instrumentation preserves a 42-fall simulation fingerprint. This evidence verifies behavior rather than proving learning or retention gains.
+
+The next validation work is focused: observe whether Workshop coaching teaches intentional interventions, whether guardian credit and safe-return limits are understood, whether the debrief explains losses and practice enables a deliberate second approach, voluntary second runs, actual run duration, difficulty by sphere, readable item interactions, interruption recovery, and keyboard/touch behavior on real devices. Remapping, global score validation, localization, a creator-ready demo, and launch assets remain separate work. No measured retention, sales, launch-readiness, or viral outcome is claimed.
 
 ## Evidence from the genre
 
@@ -83,7 +85,7 @@ Introduce escalating mastery tiers after a win. Prefer a small explained rule ch
 - **Discovery:** a collection with honest unlock conditions, discovered interactions, sphere-specific victories, and cosmetic goals. Keep early sphere access generous so experimentation begins quickly.
 - **Mastery:** visible best records per sphere and mode, difficulty milestones, and recent run history with route, build, outcome, and retry.
 - **Shared problems:** a deterministic daily or weekly expedition with a fixed starting sphere and catalogue. Include a visible date and rules; keep older challenges replayable. Do not punish missed days or require streaks for essential content.
-- **Experimentation:** eventually a small practice laboratory for trying acquired effects against known boards. Build this after the main loop is proven enjoyable.
+- **Experimentation:** the v0.1 laboratory now supports known boards, preset loadouts, and the last expedition machine. Observe whether players form and test a useful hypothesis before expanding it into a full build editor.
 
 Permanent unlocks should mainly open possibilities. If survival starts weak and only becomes fair after grinding shards, returns can reflect obligation rather than enjoyment. Watch new-profile tests for that distinction.
 

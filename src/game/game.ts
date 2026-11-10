@@ -10,12 +10,14 @@ import { type Cam, machineScale, screenToWorld } from '../render/camera'
 import { drawFrame, type Floater, type Particle, type Ring } from '../render/draw'
 import { pegPose, type Board, type BinKind } from '../sim/board'
 import { Drop, previewPath, type Cmd } from '../sim/drop'
+import { describeDrop, type DropReport } from '../sim/report'
 import { createBoard, demoBoard } from '../sim/generate'
 import { ANOMALIES, applyAnomaly } from '../sim/anomaly'
 import { applyEncounter } from '../sim/encounter'
 import { computeProfile, type Profile } from '../sim/profile'
 import { RESEARCH_ORDER, STARTER_RELICS, TUNING } from '../tuning'
 import { createRoute, type GameNode } from './route'
+import { PRACTICE_BUILDS, PRACTICE_MACHINES, copyRecipe, practiceRecipe, recipeMachine, type PracticeRecipe } from './laboratory'
 import { randomFrom, rollReward, rollShop, type Offer } from './offers'
 import { UI, type ChoiceCard, type HudModel, type StageModel, type SummaryModel, type ViewModel } from '../ui/ui'
 
@@ -73,6 +75,15 @@ interface Summary extends SummaryModel {
   rules: RulesVersion
 }
 
+interface PracticeSession {
+  recipe: PracticeRecipe
+  attempt: number
+  best: DropReport | null
+  previous: DropReport | null
+  result: DropReport | null
+  comparison: number | null
+}
+
 export class Game {
   private save: SaveData
   private screen = 'hub'
@@ -83,6 +94,11 @@ export class Game {
   private offers: Offer[] = []
   private rerolls = 0
   private summary: Summary | null = null
+  private practice: PracticeSession | null = null
+  private lastMachine: PracticeRecipe | null = null
+  private labMachine = 'workshop'
+  private labSphere = 'rubber'
+  private labBuild = 'stock'
   private reveal: { name: string; text: string; tags: string } | null = null
   private resolveCopy = { title: 'Settled', sub: '' }
   private resolveT = 0
@@ -248,6 +264,7 @@ export class Game {
         this.pausedFrom = this.screen
         this.screen = 'pause'
       } else if (this.screen === 'journal') this.screen = this.journalReturn
+      else if (this.screen === 'laboratory' || this.screen === 'practice-result') this.onAction('lab-exit')
       else if (this.screen === 'help' || this.screen === 'collection' || this.screen === 'settings' || this.screen === 'history') this.onAction('back')
       return
     }
@@ -278,6 +295,8 @@ export class Game {
     else if (p.has('Enter')) {
       if (this.screen === 'resolve') this.skipResolve()
       else if (this.screen === 'runend') this.onAction('again')
+      else if (this.screen === 'practice-result') this.onAction('lab-retry')
+      else if (this.screen === 'laboratory') this.onAction('lab-start')
       else if (this.screen === 'pause') this.screen = this.pausedFrom
     }
   }
@@ -310,7 +329,7 @@ export class Game {
     cmd.aimX = this.worldX()
     this.drop.step(dt * this.drop.timeScale, cmd)
     this.drain(false)
-    if (!this.save.coachingComplete && this.run?.nodeId === 'workshop' && this.workshopNudged && this.drop.overdriveUses > 0) {
+    if (!this.practice && !this.save.coachingComplete && this.run?.nodeId === 'workshop' && this.workshopNudged && this.drop.overdriveUses > 0) {
       this.save.coachingComplete = true
       writeSave(this.save)
       this.say('You control the fall', 'Workshop tips complete · replay them from How to play', 2, false)
@@ -431,7 +450,7 @@ export class Game {
   }
 
   private menu(): boolean {
-    return ['hub', 'help', 'collection', 'settings', 'history'].includes(this.screen)
+    return ['hub', 'help', 'collection', 'settings', 'history', 'laboratory'].includes(this.screen)
   }
 
   /** Attract mode only when no fall is in progress, so pause settings keep the live machine. */
@@ -520,7 +539,89 @@ export class Game {
     this.pending = { ...EMPTY }
   }
 
+  private openLaboratory(matched = false): void {
+    const recipe = matched && this.lastMachine ? copyRecipe(this.lastMachine)
+      : practiceRecipe(this.labMachine, this.labSphere, this.labBuild, cleanSeed(this.draftSeed) || 'HELIXLAB')
+    this.toHub()
+    this.labMachine = recipeMachine(recipe)
+    this.labSphere = recipe.ballId
+    this.practice = { recipe, attempt: 0, best: null, previous: null, result: null, comparison: null }
+    this.screen = 'laboratory'
+    this.selectedPulse++
+  }
+
+  private configureLaboratory(): void {
+    const session = this.practice
+    if (!session) return
+    this.toHub()
+    this.practice = session
+    this.screen = 'laboratory'
+    this.selectedPulse++
+  }
+
+  private changePractice(): void {
+    if (!this.practice || this.screen !== 'laboratory') return
+    const seed = this.practice.recipe.seed
+    this.practice = {
+      recipe: practiceRecipe(this.labMachine, this.labSphere, this.labBuild, seed),
+      attempt: 0, best: null, previous: null, result: null, comparison: null,
+    }
+    this.selectedPulse++
+  }
+
+  private startPractice(): void {
+    const session = this.practice
+    if (!session) return
+    const p = session.recipe
+    const node = { ...p.node }
+    const profile = computeProfile(p.ballId, p.upgrades, p.relics)
+    this.clearControls()
+    session.attempt++
+    session.result = null
+    session.comparison = null
+    this.run = {
+      seed: p.seed, ballId: p.ballId, nodes: { [node.id]: node }, nodeId: node.id,
+      upgrades: [...p.upgrades], relics: [...p.relics], gears: 0, score: 0,
+      integrity: p.integrity, integrityMax: p.integrityMax, profile,
+      drops: 0, bestCombo: 0, bestMult: profile.startMult, shatters: 0, portals: 0, jackpots: 0,
+      flipGold: false, cleanDrop: false, bossWin: false, launchedOnce: false,
+      depthTitle: node.title, boardNonce: p.boardNonce, reachedCore: false,
+      mode: p.mode, rules: p.rules, ascension: p.ascension, loop: p.loop, clears: 0,
+      catalogue: [], commissions: [], claimed: [], cleanDrops: 0, golds: 0, pegs: 0, visited: [node.id],
+    }
+    this.offers = []
+    this.toast = null
+    this.flash = ''
+    this.resolveCopy = { title: 'Practice complete', sub: '' }
+    this.sfx.resume()
+    this.beginAim(node)
+    this.selectedPulse++
+  }
+
+  private laboratoryStage(): StageModel {
+    const session = this.practice
+    if (!session) return { kind: 'none' }
+    const p = session.recipe
+    const machine = PRACTICE_MACHINES.find(m => m.id === this.labMachine) ?? PRACTICE_MACHINES[0]
+    const loadout = [...p.relics.map(id => RELICS[id].name), ...p.upgrades.map(id => UPGRADES[id].name)]
+    return {
+      kind: 'laboratory', lab: {
+        machines: PRACTICE_MACHINES.map(m => ({ ...m, selected: m.id === this.labMachine })),
+        spheres: BALL_LIST.map(b => ({ id: b.id, name: b.name, selected: b.id === p.ballId })),
+        builds: PRACTICE_BUILDS.map(b => ({ id: b.id, name: b.name, text: b.text, selected: !p.matched && b.id === this.labBuild })),
+        seed: p.seed, matched: p.matched, title: p.node.title,
+        description: p.matched
+          ? `Your last machine: same board, ${p.integrity}/${p.integrityMax} starting shell, Trial ${p.ascension}, circuit ${p.loop + 1}, and ${loadout.length ? loadout.join(' + ') : 'stock sphere'}. Changing a selector starts a standard practice setup.`
+          : machine.goal,
+        attempt: session.attempt,
+        best: session.best ? { earned: session.best.earned, combo: session.best.peakCombo, objective: session.best.objective ? `${session.best.objective.progress}/${session.best.objective.required} ${session.best.objective.name}` : session.best.title } : undefined,
+      },
+    }
+  }
+
   private startRun(seed: string, ballId: string, mode: Run['mode'] = 'expedition', ascension = this.draftAscension, catalogue?: string[], rules: RulesVersion = CURRENT_RULES): void {
+    this.practice = null
+    this.lastMachine = null
     const clean = cleanSeed(seed) || makeSeed()
     const ball = BALLS[ballId] ? ballId : 'rubber'
     const route = createRoute(rngFor(clean, 'route:0'), { ascension, rules })
@@ -621,10 +722,15 @@ export class Game {
     board.payout *= 1 + run.ascension * 0.1 + Math.min(10, run.loop) * 0.18
     if (node.encounter) applyEncounter(board, node.encounter)
     this.recompute()
-    for (const feature of board.features) {
+    for (const feature of this.practice ? [] : board.features) {
       if (!this.save.seenParts.includes(feature)) this.save.seenParts.push(feature)
     }
     this.drop = new Drop(board, run.ballId, run.profile, run.integrity, run.integrityMax)
+    if (!this.practice) this.lastMachine = {
+      seed: run.seed, ballId: run.ballId, node: { ...node }, upgrades: [...run.upgrades], relics: [...run.relics],
+      integrity: run.integrity, integrityMax: run.integrityMax, ascension: run.ascension, loop: run.loop,
+      boardNonce: run.boardNonce, rules: run.rules, mode: run.mode, matched: true,
+    }
     this.popT = new Float32Array(board.pegs.length)
     this.cash = null
     this.rings = []
@@ -646,6 +752,20 @@ export class Game {
     const run = this.run
     const drop = this.drop
     if (!run || !drop || this.screen !== 'drop') return
+    if (this.practice) {
+      const session = this.practice
+      const report = describeDrop(drop)
+      session.comparison = session.previous ? report.earned - session.previous.earned : null
+      session.previous = report
+      session.result = report
+      if (!session.best || report.earned > session.best.earned) session.best = report
+      drop.hitstop = 0
+      this.cash = null
+      this.toast = null
+      this.clearControls()
+      this.screen = 'practice-result'
+      return
+    }
     const node = run.nodes[run.nodeId]
     run.drops += 1
     run.integrity = Math.max(0, drop.integrity)
@@ -819,6 +939,7 @@ export class Game {
   }
 
   private endRun(win: boolean): void {
+    if (this.practice) return this.configureLaboratory()
     const run = this.run
     if (!run) return this.toHub()
     if (!run.launchedOnce) return this.toHub()
@@ -876,7 +997,7 @@ export class Game {
     this.summary = {
       heading: win ? 'The Grinder falls' : 'Run complete',
       line: win
-        ? 'The Helix is quieter for a moment.'
+        ? this.drop?.dead ? 'The core broke. The shell did not survive the landing.' : 'The Helix is quieter for a moment.'
         : run.integrity > 0
           ? 'The sphere left the machine. The shell is still whole.'
           : 'The shell gives out. The machine keeps the rest.',
@@ -898,6 +1019,7 @@ export class Game {
       rules: run.rules,
       mode: run.mode, ascension: run.ascension, clears: run.clears,
       commissions: run.claimed.length,
+      debrief: this.drop && (this.drop.captured || this.drop.dead) ? describeDrop(this.drop) : undefined,
     }
     if (earnedTrial && this.summary) this.summary.awakened.push(`Trial ${mastered + 1} for ${ballById(run.ballId).name}`)
     this.screen = 'runend'
@@ -946,6 +1068,8 @@ export class Game {
   }
 
   private toHub(): void {
+    this.practice = null
+    this.clearControls()
     this.screen = 'hub'
     this.run = null
     this.drop = null
@@ -1057,7 +1181,7 @@ export class Game {
 
   /** Save at decision boundaries. A reload during a drop restarts that machine. */
   private checkpoint(): void {
-    if (!this.run || !['aim', 'fork', 'shop', 'choices', 'repair', 'bargain', 'event', 'victory'].includes(this.screen)) return
+    if (this.practice || !this.run || !['aim', 'fork', 'shop', 'choices', 'repair', 'bargain', 'event', 'victory'].includes(this.screen)) return
     const { nodes: _nodes, profile: _profile, ...run } = this.run
     const data = { version: 2, run, screen: this.screen, offers: this.offers, rerolls: this.rerolls, drafting: this.drafting, draftTitle: this.draftTitle }
     writeCheckpoint(data)
@@ -1066,6 +1190,7 @@ export class Game {
   }
 
   private resumeExpedition(): void {
+    this.practice = null
     const data = this.suspended as { version: number; run: Omit<Run, 'nodes' | 'profile'>; screen: string; offers: Offer[]; rerolls: number; drafting: boolean; draftTitle: string } | null
     try {
       if (!data || data.version !== 2 || !data.run || !['aim', 'fork', 'shop', 'choices', 'repair', 'bargain', 'event', 'victory'].includes(data.screen)) throw new Error('checkpoint')
@@ -1199,7 +1324,7 @@ export class Game {
     } else if (e.type === 'relay-block') {
       this.sfx.relayBlocked()
     } else if (e.type === 'encounter-clear') {
-      if (this.cssW > 760) this.say('Guardian linked', `+${e.gears ?? 0} gears · survive for a relic`, 2, false)
+      if (this.cssW > 760) this.say('Guardian linked', this.practice ? 'Practice objective complete · finish the fall' : `+${e.gears ?? 0} gears · survive for a relic`, 2, false)
       this.sfx.guardianClear()
     } else if (e.type === 'recirculate') {
       this.snapCam = true
@@ -1382,6 +1507,7 @@ export class Game {
     const drop = this.drop
     const node = run ? run.nodes[run.nodeId] : null
     if (!run || !drop || !node) return ''
+    if (this.practice) return node.blurb
     if (this.save.runs === 0 && node.id === 'workshop') {
       if (this.screen === 'aim') return 'Point, then click. You are choosing a beginning, not a destiny.'
       if (this.screen === 'drop' && drop.overdriveReady) return 'Reactor charged. E lifts the sphere and doubles collision payouts for three seconds.'
@@ -1402,16 +1528,16 @@ export class Game {
       : `Next: ${next === 0 ? 'I · left' : 'II · right'}. Order: I → II → I → II.`
     return {
       title: encounter.name, instruction, progress: drop.encounterProgress, target: encounter.required,
-      reward: `${encounter.bounty} gears + a relic`, returns: drop.encounterComplete || drop.time >= 75 ? 0 : Math.max(0, 1 - drop.encounterReturns),
+      reward: this.practice ? 'Practice objective · no awards' : `${encounter.bounty} gears + a relic`, returns: drop.encounterComplete || drop.time >= 75 ? 0 : Math.max(0, 1 - drop.encounterReturns),
       maxReturns: 1, complete: drop.encounterComplete,
       linked: drop.relayHits.flatMap((hit, id) => hit ? [id] : []), targets: drop.encounterTargets,
-      hint: drop.encounterComplete ? 'Linked. Survive the landing to claim your relic.' : `${target} One safe-pocket return keeps progress and resources; gutters still cost shell. An incomplete relay still lets you continue.`,
+      hint: drop.encounterComplete ? this.practice ? 'Linked. Finish the fall to compare your attempt.' : 'Linked. Survive the landing to claim your relic.' : `${target} One safe-pocket return keeps progress and resources; gutters still cost shell. An incomplete relay still lets you continue.`,
     }
   }
 
   private coachModel(): HudModel['coach'] {
     const drop = this.drop
-    if (!drop || !this.run || this.run.nodeId !== 'workshop' || this.run.loop > 0 || this.save.coachingComplete || !['aim', 'drop'].includes(this.screen)) return null
+    if (this.practice || !drop || !this.run || this.run.nodeId !== 'workshop' || this.run.loop > 0 || this.save.coachingComplete || !['aim', 'drop'].includes(this.screen)) return null
     if (this.screen === 'aim') return { step: 1, title: 'Choose your first contact', text: 'Aim with the pointer or arrows. The dotted line shows the opening. Release when you like the first contact.', action: 'launch' }
     if (!drop.overdriveReady && !this.workshopNudged) return { step: 2, title: 'You can change the line', text: 'A / D or the Nudge buttons give a short push. Try one as the sphere approaches a useful lane.', action: 'nudge' }
     if (drop.overdriveUses === 0) return { step: 3, title: drop.overdriveReady ? 'Make your moment' : 'Charge the reactor', text: drop.overdriveReady ? 'Press E or Overdrive: lift the sphere and double collision payouts for three seconds. Two uses per machine.' : 'Five different physical peg contacts charge Overdrive. Repeated hits and relic lightning do not add charge.', action: 'overdrive' }
@@ -1421,7 +1547,7 @@ export class Game {
   private view(): ViewModel {
     return {
       sig: this.signature(),
-      screen: this.attract() ? 'hub' : this.screen,
+      screen: this.attract() && this.screen !== 'laboratory' ? 'hub' : this.screen,
       hud: this.hud(),
       stage: this.stage(),
       toast: this.toast,
@@ -1452,6 +1578,8 @@ export class Game {
       this.summary?.score ?? '',
       this.reveal?.name ?? '',
       this.resolveCopy.title,
+      this.practice?.attempt ?? '',
+      this.practice?.recipe.node.id ?? '',
     ]
     return base.join('|')
   }
@@ -1500,7 +1628,7 @@ export class Game {
       muted: this.sfx.isMuted,
       aiming: this.screen === 'aim',
       playing: this.screen === 'aim' || this.screen === 'drop',
-      journey: `Circuit ${this.run.loop + 1} · machine ${this.run.nodes[this.run.nodeId]?.depth ?? 1} · Trial ${this.run.ascension}`,
+      journey: this.practice ? `Practice · attempt ${this.practice.attempt} · Trial ${this.run.ascension}` : `Circuit ${this.run.loop + 1} · machine ${this.run.nodes[this.run.nodeId]?.depth ?? 1} · Trial ${this.run.ascension}`,
       objective: this.objectiveLine(),
       anomaly: this.nodeAnomaly(this.run.nodes[this.run.nodeId]) ? ANOMALIES[this.nodeAnomaly(this.run.nodes[this.run.nodeId])!].name : '',
       charge: drop.charge,
@@ -1510,12 +1638,18 @@ export class Game {
       overview: this.overview,
       encounter: this.encounterModel(),
       coach: this.coachModel(),
+      practice: !!this.practice,
     }
   }
 
   private stage(): StageModel {
     const run = this.run
     switch (this.screen) {
+      case 'laboratory': return this.laboratoryStage()
+      case 'practice-result': {
+        const s = this.practice
+        return s?.result ? { kind: 'practice-result', report: s.result, attempt: s.attempt, best: s.best?.earned ?? 0, comparison: s.comparison } : { kind: 'none' }
+      }
       case 'hub':
         return {
           kind: 'hub',
@@ -1603,7 +1737,7 @@ export class Game {
         return { kind: 'resolve', title: this.resolveCopy.title, sub: this.resolveCopy.sub, earned: d?.earned ?? 0, tone }
       }
       case 'pause':
-        return { kind: 'pause' }
+        return { kind: 'pause', practice: !!this.practice }
       case 'event':
         return run ? { kind: 'event', ...this.eventModel() } : { kind: 'none' }
       case 'victory':
@@ -1659,6 +1793,7 @@ export class Game {
   private objectiveLine(): string {
     const run = this.run
     if (!run) return ''
+    if (this.practice) return 'Practice only · archive and expedition preserved'
     const next = COMMISSIONS.find(c => run.commissions.includes(c.id) && !run.claimed.includes(c.id))
     return next ? `${next.name}: ${Math.min(next.target, run[next.stat])}/${next.target} · +${next.gears} gears` : 'All commissions fulfilled · a beautiful descent'
   }
@@ -1678,7 +1813,8 @@ export class Game {
     const current = run.nodes[run.nodeId]
     return {
       kind: 'journal', title: ballById(run.ballId).name,
-      stats: `${run.rules === 2 ? 'Classic route · ' : ''}Circuit ${run.loop + 1} · Trial ${run.ascension} · ${run.integrity}/${run.integrityMax} shell · ${run.gears} gears · Seed ${run.seed}`,
+      practice: !!this.practice,
+      stats: `${this.practice ? 'Practice · ' : ''}${run.rules === 2 ? 'Classic route · ' : ''}Circuit ${run.loop + 1} · Trial ${run.ascension} · ${run.integrity}/${run.integrityMax} shell · ${run.gears} gears · Seed ${run.seed}`,
       encounter: this.encounterModel(),
       commissions: COMMISSIONS.filter(c => run.commissions.includes(c.id)).map(c => ({ name: c.name, text: `${c.text} +${c.gears} gears.`, value: run[c.stat], target: c.target, done: run.claimed.includes(c.id) })),
       relics: run.relics.map(id => ({ name: RELICS[id].name, text: RELICS[id].text, known: true })),
@@ -1712,6 +1848,16 @@ export class Game {
   private researchCost(): number { return TUNING.researchCost + this.save.researched.length * 8 }
 
   private onAction(act: string): void {
+    if (act === 'laboratory' && this.screen === 'hub') { this.openLaboratory(); return }
+    if (act === 'practice-last' && this.screen === 'runend' && this.summary?.debrief && this.lastMachine) { this.openLaboratory(true); return }
+    if (act === 'lab-exit' && this.practice) { this.toHub(); return }
+    if (act === 'lab-configure' && this.practice) { this.configureLaboratory(); return }
+    if ((act === 'lab-start' || act === 'lab-retry') && this.practice && ['laboratory', 'aim', 'drop', 'pause', 'practice-result'].includes(this.screen)) { this.startPractice(); return }
+    if (this.screen === 'laboratory' && this.practice) {
+      if (act.startsWith('lab-machine:') && PRACTICE_MACHINES.some(m => m.id === act.slice(12))) { this.labMachine = act.slice(12); this.changePractice(); return }
+      if (act.startsWith('lab-sphere:') && BALLS[act.slice(11)]) { this.labSphere = act.slice(11); this.changePractice(); return }
+      if (act.startsWith('lab-build:') && PRACTICE_BUILDS.some(b => b.id === act.slice(10))) { this.labBuild = act.slice(10); this.changePractice(); return }
+    }
     if (act === 'coach-dismiss') {
       this.save.coachingComplete = true
       writeSave(this.save)
@@ -1816,6 +1962,7 @@ export class Game {
       return
     }
     if (act === 'abandon') {
+      if (this.practice) { this.configureLaboratory(); return }
       if (this.run && !this.run.launchedOnce) { clearCheckpoint(); this.suspended = null; this.toHub() }
       else this.endRun(false)
       return

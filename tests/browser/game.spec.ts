@@ -54,7 +54,7 @@ async function cleanLayout(page: Page) {
         }
       }
     }
-    if (/\b(?:undefined|NaN)\b/.test(document.getElementById('app')!.textContent ?? '')) issues.push('Invalid UI value')
+    if (/\b(?:undefined|NaN)\b/i.test(document.getElementById('app')!.textContent ?? '')) issues.push('Invalid UI value')
     return issues
   })
   expect(problems).toEqual([])

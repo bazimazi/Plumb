@@ -1,7 +1,7 @@
 {
   "name": "plumb",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,10 +12,11 @@
     "verify:builds": "tsx scripts/verify-builds.ts",
     "verify:routes": "tsx scripts/verify-routes.ts",
     "verify:expeditions": "tsx scripts/verify-expeditions.ts",
-    "test": "npm run verify:builds && npm run verify:momentum && npm run verify:encounters && npm run verify:routes && npm run verify:expeditions",
+    "test": "npm run verify:builds && npm run verify:momentum && npm run verify:encounters && npm run verify:reports && npm run verify:routes && npm run verify:expeditions",
     "verify:momentum": "tsx scripts/verify-momentum.ts",
     "verify:browser": "playwright test",
-    "verify:encounters": "tsx scripts/verify-encounters.ts"
+    "verify:encounters": "tsx scripts/verify-encounters.ts",
+    "verify:reports": "tsx scripts/verify-reports.ts"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.9",
