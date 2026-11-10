@@ -1,5 +1,11 @@
 import { selfcheckPhysics } from './physics/collide'
 import { Game } from './game/game'
+import { isNativeApp } from './platform'
+
+// The webview's own context menu (Reload, Inspect, ...) does not belong in the shipped app.
+if (isNativeApp && !import.meta.env.DEV) {
+  window.addEventListener('contextmenu', (e) => e.preventDefault())
+}
 
 const boot = document.getElementById('stage')
 try {

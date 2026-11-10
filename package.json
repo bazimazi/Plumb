@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
     "typecheck": "tsc --noEmit",
     "verify:visuals": "tsx scripts/verify-visuals.ts",
     "verify:builds": "tsx scripts/verify-builds.ts",
@@ -21,6 +24,7 @@
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.9",
     "@playwright/test": "^1.64.1",
+    "@tauri-apps/cli": "^2.12.4",
     "happy-dom": "^21.0.4",
     "tsx": "^4.23.15",
     "typescript": "^5.7.3",

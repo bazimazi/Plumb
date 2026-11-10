@@ -1,0 +1,32 @@
+[package]
+name = "plumb"
+version = "0.1.0"
+description = "PLUMB, a pachinko roguelite"
+authors = ["bazimazi"]
+license = "MIT"
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+# The `_lib` suffix avoids a name clash with the binary on Windows (cargo#8519).
+name = "plumb_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = [] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+# Build scripts run only at compile time; leave them unstripped and fast to compile.
+[profile.release.build-override]
+codegen-units = 256
+strip = false

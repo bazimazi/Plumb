@@ -6,6 +6,7 @@ import { Input } from '../input'
 import { grantChallenges } from '../meta/challenges'
 import { loadSave, shardsFor, writeSave, type SaveData } from '../meta/save'
 import { ASCENSIONS, COMMISSIONS, CURRENT_RULES, challengeUrl, clearCheckpoint, commissionSet, dailyExpedition, readCheckpoint, writeCheckpoint, type RulesVersion, type RunRecord } from '../meta/expedition'
+import { shareBase } from '../platform'
 import { type Cam, machineScale, screenToWorld } from '../render/camera'
 import { drawFrame, type Floater, type Particle, type Ring } from '../render/draw'
 import { pegPose, type Board, type BinKind } from '../sim/board'
@@ -1906,7 +1907,7 @@ export class Game {
     }
     if (act.startsWith('share:')) {
       const record = this.save.history[Number(act.slice(6))]
-      if (record) this.copyText(challengeUrl(location.href, record), 'Challenge copied')
+      if (record) this.copyText(challengeUrl(shareBase(), record), 'Challenge copied')
       return
     }
     if (act === 'bank') { if (this.screen === 'victory') this.endRun(true); return }
@@ -2023,7 +2024,7 @@ export class Game {
     if (act === 'copy-challenge' || act === 'copy-result') {
       const run = this.run
       if (!run) return
-      const link = challengeUrl(location.href, run)
+      const link = challengeUrl(shareBase(), run)
       const result = `PLUMB ✧ ${run.score.toLocaleString()} · ${ballById(run.ballId).name} · Trial ${run.ascension}\n${run.clears} circuit${run.clears === 1 ? '' : 's'} cleared · ${run.bestCombo} best combo · ${run.claimed.length}/3 commissions\n${run.relics.map(id => RELICS[id].name).join(' + ')}\n${link}`
       this.copyText(act === 'copy-result' ? result : link, act === 'copy-result' ? 'Result copied' : 'Challenge copied')
       return

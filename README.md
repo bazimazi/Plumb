@@ -55,6 +55,21 @@ Open the local URL Vite prints. `npm run build` typechecks and writes `dist/`.
 
 Use a currently supported Node.js LTS release. The test harness uses Happy DOM and native Canvas; these are development dependencies and are not shipped in the game bundle.
 
+## Desktop and mobile apps
+
+The same web build ships as a native app through [Tauri 2](https://tauri.app). The shell in `src-tauri/` only hosts the game in the system webview (WebView2 on Windows, WKWebView on macOS and iOS, WebKitGTK on Linux, Android System WebView); it needs no native APIs. Install [Rust](https://rustup.rs) and the [platform prerequisites](https://tauri.app/start/prerequisites/) first.
+
+```bash
+npm run app:dev     # native window with Vite hot reload
+npm run app:build   # installers in src-tauri/target/release/bundle/
+```
+
+On Windows this produces an NSIS installer and an MSI; on macOS a `.app` and `.dmg`; on Linux `.deb`, `.rpm`, and an AppImage. Each platform builds its own bundles, so use the **Desktop apps** workflow for all three: run it manually, or push a `v*` tag to also attach the bundles to a draft GitHub release. Builds are unsigned until signing certificates are configured.
+
+For phones, run `npm run tauri android init` or `npm run tauri ios init` once (Android SDK/NDK or Xcode required), then `npm run tauri android dev` / `npm run tauri ios dev`. The app icon source is `src-tauri/app-icon.svg`; regenerate every size with `npm run tauri icon src-tauri/app-icon.svg`.
+
+Saves and the expedition checkpoint live in the app's own webview storage, separate from the browser version. Challenge links copied in the app point to https://plumb.bazimazi.games so others can open them.
+
 The Helix is presented as a celestial arcade: an animated astrolabe on the title screen, engraved machines in four color palettes, glass sphere materials, illuminated collectors, and ricochet effects. The selected sphere changes the title specimen. Phone layouts reserve space above and below the playfield for the controls; system reduced-motion preferences quiet ambient animation, camera shake, zoom, particles, and flashes.
 
 ## Visual verification

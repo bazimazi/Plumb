@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Core permissions for the game window. The game runs entirely in the webview and needs no native APIs.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

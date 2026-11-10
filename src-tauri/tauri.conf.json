@@ -1,0 +1,50 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "PLUMB",
+  "version": "../package.json",
+  "identifier": "games.bazimazi.plumb",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "PLUMB",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 360,
+        "minHeight": 560,
+        "center": true,
+        "resizable": true,
+        "backgroundColor": "#0c1012"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Game",
+    "shortDescription": "A pachinko roguelite.",
+    "longDescription": "The sphere falls through a living machine. You cannot hold it. You can still decide the fall.",
+    "publisher": "bazimazi",
+    "copyright": "Copyright (c) 2026 bazimazi",
+    "license": "MIT",
+    "homepage": "https://plumb.bazimazi.games",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}
