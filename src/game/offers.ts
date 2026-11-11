@@ -66,16 +66,17 @@ export function rollReward(
   researched: string[],
   seed: string,
   salt: string,
+  count = 3,
 ): Offer[] {
   const rng = rngFor(seed, salt)
   if (kind === 'upgrade') {
     const pool = Object.values(UPGRADES).filter((u) => !upgrades.includes(u.id))
-    return take(rng, pool, 3, primary).map((u) => toOffer('upgrade', u, ballId, upgrades, relics, 0))
+    return take(rng, pool, count, primary).map((u) => toOffer('upgrade', u, ballId, upgrades, relics, 0))
   }
   const pool = availableRelicIds(researched)
     .map((id) => RELICS[id])
     .filter((r) => r && !relics.includes(r.id))
-  return take(rng, pool, 3, primary).map((r) => toOffer('relic', r, ballId, upgrades, relics, 0))
+  return take(rng, pool, count, primary).map((r) => toOffer('relic', r, ballId, upgrades, relics, 0))
 }
 
 export function rollShop(

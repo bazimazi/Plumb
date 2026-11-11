@@ -1,4 +1,4 @@
-import { OVERDRIVE, type Drop, type DropDamage } from './drop'
+import type { Drop, DropDamage } from './drop'
 
 export interface DropReport {
   title: string
@@ -40,7 +40,7 @@ export function describeDrop(drop: Drop): DropReport {
   }
   if (drop.profile.tiltCharges > 0) resources.push({ label: 'Tilt', used: drop.tiltUses, remaining: drop.tilts })
   if (drop.board.shutterY != null) resources.push({ label: 'Gate flips', used: drop.flipUses, remaining: drop.flips })
-  resources.push({ label: 'Overdrive', used: drop.overdriveUses, remaining: Math.max(0, OVERDRIVE.maxUses - drop.overdriveUses) })
+  resources.push({ label: 'Overdrive', used: drop.overdriveUses, remaining: Math.max(0, drop.profile.overdriveMax - drop.overdriveUses) })
 
   let title: string
   let outcome: DropReport['outcome']
@@ -85,7 +85,7 @@ export function describeDrop(drop: Drop): DropReport {
         ? 'The Heartforge accepts alternating I–II–I–II relay contacts.'
         : 'The Bellkeeper accepts each of its three relays once, in any order.')
   }
-  if (drop.charge >= 1 && drop.overdriveUses < OVERDRIVE.maxUses && drop.overdriveTime <= 0) {
+  if (drop.charge >= 1 && drop.overdriveUses < drop.profile.overdriveMax && drop.overdriveTime <= 0) {
     tips.push('The reactor is charged with an activation remaining. E provides a timed lift and scoring surge during a fall.')
   } else if (drop.nudges > 0) {
     tips.push(`${drop.nudges} nudge${drop.nudges === 1 ? '' : 's'} remain${drop.nudges === 1 ? 's' : ''}. A / D gives the sphere a short sideways push.`)

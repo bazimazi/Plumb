@@ -1,6 +1,7 @@
 import { BALLS, UPGRADES, RELICS, type Tag, type SpecialKind, ballById } from '../content/catalog'
 import { TUNING } from '../tuning'
 import { capitalize } from '../core/math'
+import { OVERDRIVE } from './drop'
 
 export interface Synergy {
   tag: Tag
@@ -56,6 +57,9 @@ export interface Profile {
   comboBonusAt: number
   comboBonusScale: number
   landingBonus: number
+  /** Overdrive activations per machine, and distinct contacts needed to charge one. */
+  overdriveMax: number
+  pegsToCharge: number
   tags: Partial<Record<Tag, number>>
   synergies: Synergy[]
 }
@@ -193,6 +197,8 @@ export function computeProfile(ballId: string, upgrades: string[], relics: strin
     comboBonusAt: up.has('compound-interest') ? UPGRADES['compound-interest'].params.combo : 0,
     comboBonusScale: up.has('compound-interest') ? UPGRADES['compound-interest'].params.scale : 1,
     landingBonus: up.has('landing-gear') ? UPGRADES['landing-gear'].params.pay : 0,
+    overdriveMax: OVERDRIVE.maxUses,
+    pegsToCharge: OVERDRIVE.pegsToCharge,
     tags,
     synergies,
   }

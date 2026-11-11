@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createCanvas } from '@napi-rs/canvas'
 import { Window } from 'happy-dom'
 import { BALLS, RELICS } from '../src/content/catalog'
-import { COMMISSIONS, challengeUrl, dailyExpedition, readCheckpoint } from '../src/meta/expedition'
+import { COMMISSIONS, MAX_TRIAL, challengeUrl, dailyExpedition, readCheckpoint } from '../src/meta/expedition'
 import { loadSave, writeSave, type SaveData } from '../src/meta/save'
 import { RESEARCH_ORDER, TUNING } from '../src/tuning'
 import { Drop } from '../src/sim/drop'
@@ -161,6 +161,17 @@ function victory(f: Fixture) {
   click(f, 'skip')
   assert.equal(f.game.screen, 'victory')
 }
+function await_quests(f: Fixture) {
+  return (f.game.questsStage().daily as unknown[])
+}
+function finishPractice(f: Fixture) {
+  const g = f.game
+  if (g.screen === 'aim') press(f, 'Enter')
+  Object.assign(g.drop, { captured: 'coin', dead: false, hazardThis: 0, pegs: 999, golds: 999 })
+  g.drain(true)
+  g.finishDrop()
+  assert.equal(g.screen, 'practice-result')
+}
 function check(name: string, run: () => void | Promise<void>) {
   return Promise.resolve().then(run).then(() => {
     checks++
@@ -210,7 +221,7 @@ await check('malformed saves and checkpoints recover without corrupting the arch
   assert.deepEqual(f.game.save.balls, ['rubber', 'void'])
   assert.equal(f.game.save.shards, 0)
   assert.equal(f.game.save.runs, 0)
-  assert.equal(f.game.save.mastery.void, 6)
+  assert.equal(f.game.save.mastery.void, MAX_TRIAL)
   assert.equal(f.game.save.settings.volume, 1)
   assert.equal(f.game.save.settings.speed, 1)
   assert.equal(f.game.save.settings.particles, true)
@@ -1154,6 +1165,132 @@ await check('laboratory restart, journal, settings, and exit preserve their isol
   assert.equal(f.game.save.runs, 0)
   assert.deepEqual(f.game.save.balls, ['rubber'])
   assert.equal(readCheckpoint(), null)
+})
+
+await check('Star Chart upgrades apply to standard expeditions and never to dailies or shared challenges', () => {
+  const chart = { startGears: 5, nudge: 1, shell: 1, reactor: 1, combo: 2 }
+  const base = begin()
+  const stock = { nudges: base.game.run.profile.maxNudges, shell: base.game.run.integrityMax, window: base.game.run.profile.comboWindow }
+  const f = begin({ save: { chart } })
+  assert.equal(f.game.run.pure, false)
+  assert.equal(f.game.run.gears, 40)
+  assert.equal(f.game.run.profile.maxNudges, stock.nudges + 1)
+  assert.equal(f.game.run.integrityMax, stock.shell + 1)
+  assert.equal(f.game.run.integrity, f.game.run.integrityMax)
+  assert.equal(f.game.run.profile.pegsToCharge, 4)
+  assert.ok(Math.abs(f.game.run.profile.comboWindow - stock.window - 0.06) < 1e-9)
+  const daily = fixture({ save: { chart } })
+  click(daily, 'daily')
+  assert.equal(daily.game.run.pure, true)
+  assert.equal(daily.game.run.gears, 0)
+  const url = challengeUrl('https://plumb.test/', { seed: 'PUREST', ballId: 'rubber', mode: 'expedition', ascension: 0, catalogue: [], rules: 3 })
+  const shared = fixture({ url, save: { chart } })
+  click(shared, 'start')
+  assert.equal(shared.game.run.pure, true)
+  assert.equal(shared.game.run.gears, 0)
+  const off = fixture({ url: 'https://plumb.test/?seed=INTEGRATE', save: { chart, chartOn: false } })
+  click(off, 'start')
+  assert.equal(off.game.run.pure, true)
+  assert.equal(off.game.run.profile.pegsToCharge, 5)
+})
+
+await check('retrying or replaying a standard expedition keeps the Star Chart', () => {
+  const f = begin({ save: { chart: { startGears: 5 } } })
+  finish(f, { dead: true, captured: 'hazard', integrity: 0, hazardThis: 1 })
+  click(f, 'skip')
+  assert.equal(f.game.screen, 'runend')
+  assert.equal(f.game.summary.progress.pure, false)
+  click(f, 'retry')
+  assert.equal(f.game.run.pure, false)
+  assert.equal(f.game.run.gears, 40)
+  f.game.toHub()
+  f.game.onAction('replay:0')
+  assert.equal(f.game.run.pure, false)
+})
+
+await check('Star Chart purchases spend stardust, respect caps and survive reload', () => {
+  const f = fixture({ save: { stardust: 1000 } })
+  click(f, 'stars')
+  assert.equal(f.game.screen, 'stars')
+  click(f, 'star:nudge')
+  assert.equal(f.game.save.chart.nudge, 1)
+  assert.equal(f.game.save.stardust, 680)
+  click(f, 'star:yield')
+  assert.equal(f.game.save.chart.yield, 1)
+  assert.equal(f.game.save.stardust, 655)
+  f.game.buyStar('nudge')
+  assert.equal(f.game.save.chart.nudge, 1, 'a capped node cannot be bought again')
+  assert.equal(f.game.save.stardust, 655)
+  assert.deepEqual(loadSave().chart, { nudge: 1, yield: 1 })
+  click(f, 'back')
+  assert.equal(f.game.screen, 'hub')
+})
+
+await check('high trials apply their documented rules', () => {
+  const f = fixture({ url: 'https://plumb.test/?seed=INTEGRATE', save: { mastery: { rubber: MAX_TRIAL, prism: 0, void: 0 } } })
+  for (let i = 0; i < MAX_TRIAL; i++) click(f, 'trial-up')
+  assert.equal(f.game.draftAscension, MAX_TRIAL)
+  click(f, 'start')
+  click(f, 'pick:0')
+  const p = f.game.run.profile
+  assert.equal(p.overdriveMax, 1)
+  assert.equal(p.maxNudges, 1)
+  assert.equal(f.game.run.integrityMax, 1)
+  assert.ok(p.gravityScale > 1.05)
+  assert.equal(f.game.drop.board.gapWidth > 0, true)
+  f.game.enterNode('rest-brass')
+  assert.equal(f.game.repairAmount(), 2)
+})
+
+await check('finished expeditions grant XP, stardust, mastery, win stickers and a one-time depth bounty', () => {
+  const f = begin()
+  victory(f)
+  click(f, 'bank')
+  const first = f.game.summary.progress
+  assert.ok(first.xp > 0 && first.dust > 0)
+  assert.ok(first.depthDust > 0)
+  assert.equal(first.depthRecord, 1)
+  assert.equal(f.game.save.deepest.rubber, 1)
+  assert.ok(f.game.save.sphereLevels.rubber.level >= 1)
+  for (const id of f.game.save.history[0].relics) assert.equal(f.game.save.stickers[id], 1)
+  assert.ok(f.game.save.stardust >= first.dust + first.depthDust)
+  const again = fixture({ url: 'https://plumb.test/?seed=INTEGRATE', save: { deepest: { rubber: 1 } } })
+  click(again, 'start'); click(again, 'pick:0')
+  victory(again)
+  click(again, 'bank')
+  assert.equal(again.game.summary.progress.depthDust, 0, 'repeating a depth pays nothing')
+  assert.match(again.window.document.querySelector('.progress-panel')?.textContent ?? '', /XP/)
+})
+
+await check('quests advance from real drop results, pay once, and never count practice', () => {
+  const f = begin()
+  const defs = f.game.save.daily.key ? (await_quests(f)) : []
+  assert.equal(defs.length, 3)
+  const before = f.game.save.stardust
+  finish(f, { pegs: 5000, golds: 5000, peakCombo: 99, jackpot: true, overdriveUses: 99, encounterComplete: false, shatters: 99, earned: 99999, nudgeUses: 99 })
+  const done = f.game.save.daily.claimed.length
+  assert.ok(done >= 2, 'large real-drop totals complete most daily quests')
+  assert.ok(f.game.save.stardust > before)
+  const paid = f.game.save.stardust
+  f.game.trackDrop(f.game.drop, f.game.run)
+  assert.equal(f.game.save.daily.claimed.length, done)
+  assert.equal(f.game.save.stardust, paid, 'completed quests never pay twice')
+  const lab = fixture()
+  click(lab, 'laboratory')
+  click(lab, 'lab-start')
+  finishPractice(lab)
+  assert.deepEqual(lab.game.save.daily.progress, {})
+})
+
+await check('sphere finishes are cosmetic and gated by mastery', () => {
+  const f = fixture({ save: { sphereLevels: { rubber: { level: 3, xp: 0 } } } })
+  click(f, 'finish:rubber-coral')
+  assert.equal(f.game.save.finish.rubber, 'rubber-coral')
+  f.game.onAction('finish:rubber-jade')
+  assert.equal(f.game.save.finish.rubber, 'rubber-coral', 'a locked finish cannot be equipped')
+  click(f, 'start'); click(f, 'pick:0')
+  assert.equal(f.game.drop.ballDef.color, '#ff8f7a')
+  assert.equal(f.game.drop.ballDef.launch, BALLS.rubber.launch)
 })
 
 for (const window of windows) await window.happyDOM.close()

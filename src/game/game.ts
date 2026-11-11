@@ -5,7 +5,7 @@ import { cleanSeed, makeSeed, rngFor } from '../core/rng'
 import { Input } from '../input'
 import { grantChallenges } from '../meta/challenges'
 import { loadSave, shardsFor, writeSave, type SaveData } from '../meta/save'
-import { ASCENSIONS, COMMISSIONS, CURRENT_RULES, challengeUrl, clearCheckpoint, commissionSet, dailyExpedition, readCheckpoint, writeCheckpoint, type RulesVersion, type RunRecord } from '../meta/expedition'
+import { ASCENSIONS, COMMISSIONS, CURRENT_RULES, MAX_TRIAL, challengeUrl, clearCheckpoint, commissionSet, dailyExpedition, readCheckpoint, writeCheckpoint, type RulesVersion, type RunRecord } from '../meta/expedition'
 import { shareBase } from '../platform'
 import { type Cam, machineScale, screenToWorld } from '../render/camera'
 import { drawFrame, type Floater, type Particle, type Ring } from '../render/draw'
@@ -20,9 +20,13 @@ import { RESEARCH_ORDER, STARTER_RELICS, TUNING } from '../tuning'
 import { createRoute, type GameNode } from './route'
 import { PRACTICE_BUILDS, PRACTICE_MACHINES, copyRecipe, practiceRecipe, recipeMachine, type PracticeRecipe } from './laboratory'
 import { randomFrom, rollReward, rollShop, type Offer } from './offers'
-import { UI, type ChoiceCard, type HudModel, type StageModel, type SummaryModel, type ViewModel } from '../ui/ui'
+import { Haptics, type HapticCue } from '../haptics'
+import { DAILY_QUEST_REWARD, FEATS, FINISHES, NO_BONUS, STAR_NODES, WEEKLY_QUEST_REWARD, addXp, advanceQuests, toRoman, chartBonuses, dayKey, depthBounty, featProgress, featReward, finishFor, masteryXp, questDefs, rankReward, rankTitle, rankXp, starCost, starNode, stardustFor, weekKey, xpFor, type ChartBonuses, type QuestDef, type QuestStat } from '../meta/progression'
+import { UI, type ChoiceCard, type ProgressModel, type HudModel, type StageModel, type SummaryModel, type ViewModel } from '../ui/ui'
 
 const EMPTY: Cmd = { nudge: 0, flip: false, special: false, tilt: false, aimX: 0 }
+
+const toRomanTier = (n: number) => toRoman(n)
 
 const COMBO_CALLS: Record<number, string> = { 5: 'Nice chain', 10: 'Great chain', 15: 'Rattling!', 20: 'Unstoppable', 30: 'Helix hum' }
 
@@ -68,6 +72,10 @@ interface Run {
   golds: number
   pegs: number
   visited: string[]
+  /** Pure runs ignore the Star Chart: dailies, shared challenges, and opted-out expeditions. */
+  pure?: boolean
+  overdrives?: number
+  guardians?: number
 }
 
 interface Summary extends SummaryModel {
@@ -163,6 +171,16 @@ export class Game {
   private readonly sfx: Sfx
   private readonly debugEl: HTMLElement
   private readonly motionQuery = matchMedia('(prefers-reduced-motion: reduce)')
+  private readonly haptics = new Haptics()
+  /** Adaptive resolution ceiling; lowered when frames run long. */
+  private dprCap = 2
+  private frameAvg = 16.7
+  private frameSamples = 0
+  /** Fastest sustained frame interval seen: the display's refresh period, or a power-saving cap. */
+  private frameBase = 1000
+  private menuSkip = false
+  /** Rewards earned mid-run, announced at a calm moment. */
+  private questNews: string[] = []
 
   constructor() {
     this.dev = import.meta.env?.DEV ?? false
@@ -195,11 +213,13 @@ export class Game {
     if ((params.get('rules') === '2' || params.get('rules') === '3') && this.draftSeed) {
       this.sharedRules = params.get('rules') === '2' ? 2 : 3
       this.sharedBall = BALLS[params.get('sphere') || '']?.id || ''
-      this.draftAscension = Math.floor(clamp(Number(params.get('trial')) || 0, 0, 6))
+      this.draftAscension = Math.floor(clamp(Number(params.get('trial')) || 0, 0, MAX_TRIAL))
       this.sharedCatalogue = (params.get('archive') || '').split(',').filter(id => RELICS[id])
       this.sharedDaily = params.get('daily') === '1' && /^DAY\d{8}$/.test(this.draftSeed)
     }
     this.suspended = readCheckpoint()
+    this.haptics.enabled = this.save.settings.haptics
+    this.refreshQuests()
     if (params.has('debug')) this.debugOpen = true
     document.documentElement.classList.toggle('lg', this.save.settings.large)
     this.resize()
@@ -221,16 +241,48 @@ export class Game {
     const r = this.canvas.getBoundingClientRect()
     this.cssW = r.width
     this.cssH = r.height
-    this.dpr = Math.min(2, window.devicePixelRatio || 1)
+    this.dpr = Math.min(this.dprCap, this.qualityCeiling())
     this.canvas.width = Math.max(1, Math.floor(this.cssW * this.dpr))
     this.canvas.height = Math.max(1, Math.floor(this.cssH * this.dpr))
   }
 
+  private qualityCeiling(): number {
+    const device = window.devicePixelRatio || 1
+    return Math.min(device, this.save.settings.quality === 'saver' ? 1.25 : 2)
+  }
+
+  /** Lowers resolution when frames run long during play, and recovers slowly with headroom. */
+  private adaptQuality(dtMs: number): void {
+    if (this.save.settings.quality !== 'auto' || (this.screen !== 'drop' && this.screen !== 'aim')) return
+    this.frameAvg += (Math.min(100, dtMs) - this.frameAvg) * 0.05
+    if (++this.frameSamples < 90) return
+    this.frameBase = Math.min(this.frameBase * 1.002, Math.max(4, this.frameAvg))
+    const ceiling = this.qualityCeiling()
+    // Compare with the refresh baseline, so a 30 fps power cap is not mistaken for overload.
+    if (this.frameAvg > Math.max(20, this.frameBase * 1.45) && this.dprCap > 1) {
+      this.dprCap = Math.max(1, Math.min(this.dprCap, ceiling) - 0.25)
+      this.frameSamples = 0
+      this.resize()
+    } else if (this.frameAvg < this.frameBase * 1.12 && this.dprCap < ceiling && this.frameSamples > 600) {
+      this.dprCap = Math.min(ceiling, this.dprCap + 0.25)
+      this.frameSamples = 0
+      this.resize()
+    }
+  }
+
   private frame(now: number): void {
     const t = now / 1000
+    // Battery saver draws menus at half rate; the next frame accounts for the skipped time.
+    if (this.save.settings.quality === 'saver' && this.menu() && !this.menuSkip) {
+      this.menuSkip = true
+      requestAnimationFrame((n) => this.frame(n))
+      return
+    }
+    this.menuSkip = false
     let dt = t - this.last
     this.last = t
     if (!Number.isFinite(dt) || dt < 0) dt = 0
+    this.adaptQuality(dt * 1000)
     if (dt > 0.05) dt = 0.05
     this.frames++
     this.fpsT += dt
@@ -266,7 +318,7 @@ export class Game {
         this.screen = 'pause'
       } else if (this.screen === 'journal') this.screen = this.journalReturn
       else if (this.screen === 'laboratory' || this.screen === 'practice-result') this.onAction('lab-exit')
-      else if (this.screen === 'help' || this.screen === 'collection' || this.screen === 'settings' || this.screen === 'history') this.onAction('back')
+      else if (['help', 'collection', 'settings', 'history', 'stars', 'quests'].includes(this.screen)) this.onAction('back')
       return
     }
     if (p.has('KeyJ') && this.run && this.screen !== 'runend') this.onAction('journal')
@@ -293,6 +345,7 @@ export class Game {
     } else if (p.has('Digit1')) this.hotkey(0)
     else if (p.has('Digit2')) this.hotkey(1)
     else if (p.has('Digit3')) this.hotkey(2)
+    else if (p.has('Digit4')) this.hotkey(3)
     else if (p.has('Enter')) {
       if (this.screen === 'resolve') this.skipResolve()
       else if (this.screen === 'runend') this.onAction('again')
@@ -342,6 +395,32 @@ export class Game {
     const board = demoBoard()
     const profile = computeProfile('rubber', [], [])
     this.demo = new Drop(board, 'rubber', profile, 3, 3)
+    this.dress(this.demo, 'rubber')
+  }
+
+  /** Applies the selected cosmetic finish. Physics never reads these colors. */
+  private dress(drop: Drop, ballId: string): void {
+    const finish = finishFor(ballId, this.save.finish[ballId], this.sphereLevel(ballId))
+    if (finish) drop.ballDef = { ...drop.ballDef, color: finish.color, accent: finish.accent, core: finish.core }
+  }
+
+  private sphereLevel(ballId: string): number {
+    return this.save.sphereLevels[ballId]?.level ?? 1
+  }
+
+  private showcaseBall() {
+    const id = this.sharedBall || this.save.ball
+    const def = ballById(id)
+    const finish = finishFor(id, this.save.finish[id], this.sphereLevel(id))
+    return finish ? { ...def, color: finish.color, accent: finish.accent, core: finish.core } : def
+  }
+
+  private bonuses(): ChartBonuses {
+    return this.run && !this.run.pure && this.run.mode !== 'daily' && !this.practice ? chartBonuses(this.save.chart) : NO_BONUS
+  }
+
+  private feel(cue: HapticCue): void {
+    this.haptics.play(cue)
   }
 
   private animate(dt: number): void {
@@ -446,12 +525,12 @@ export class Game {
       trailColor: trail,
       time: this.motionQuery.matches ? 0 : time,
       hitboxes: this.hitboxes,
-      showcase: demo ? ballById(this.sharedBall || this.save.ball) : null,
+      showcase: demo ? this.showcaseBall() : null,
     })
   }
 
   private menu(): boolean {
-    return ['hub', 'help', 'collection', 'settings', 'history', 'laboratory'].includes(this.screen)
+    return ['hub', 'help', 'collection', 'settings', 'history', 'laboratory', 'stars', 'quests'].includes(this.screen)
   }
 
   /** Attract mode only when no fall is in progress, so pause settings keep the live machine. */
@@ -535,6 +614,7 @@ export class Game {
     if (this.save.settings.particles) this.sparks(mx, my, pal, 12, 260, Math.atan2(Math.cos(angle), Math.sin(angle)), 0.7)
     this.trauma = Math.min(1, this.trauma + 0.25)
     this.run.launchedOnce = true
+    this.feel('bump')
     this.screen = 'drop'
     this.preview = []
     this.pending = { ...EMPTY }
@@ -620,13 +700,17 @@ export class Game {
     }
   }
 
-  private startRun(seed: string, ballId: string, mode: Run['mode'] = 'expedition', ascension = this.draftAscension, catalogue?: string[], rules: RulesVersion = CURRENT_RULES): void {
+  private startRun(seed: string, ballId: string, mode: Run['mode'] = 'expedition', ascension = this.draftAscension, catalogue?: string[], rules: RulesVersion = CURRENT_RULES, shared = false): void {
     this.practice = null
     this.lastMachine = null
+    this.questNews = []
     const clean = cleanSeed(seed) || makeSeed()
     const ball = BALLS[ballId] ? ballId : 'rubber'
     const route = createRoute(rngFor(clean, 'route:0'), { ascension, rules })
     const profile = computeProfile(ball, [], [])
+    // Shared and daily runs must reproduce on any profile, so they never use permanent upgrades.
+    const pure = mode === 'daily' || shared || !this.save.chartOn
+    const chart = pure ? NO_BONUS : chartBonuses(this.save.chart)
     this.run = {
       seed: clean,
       ballId: ball,
@@ -634,7 +718,7 @@ export class Game {
       nodeId: route.start,
       upgrades: [],
       relics: [],
-      gears: 0,
+      gears: chart.startGears,
       score: 0,
       integrity: profile.integrityMax,
       integrityMax: profile.integrityMax,
@@ -655,7 +739,10 @@ export class Game {
       mode, rules, ascension, loop: 0, clears: 0,
       catalogue: [...(catalogue ?? (mode === 'daily' ? RESEARCH_ORDER : this.save.researched))],
       commissions: commissionSet(clean), claimed: [], cleanDrops: 0, golds: 0, pegs: 0, visited: [],
+      pure, overdrives: 0, guardians: 0,
     }
+    this.recompute()
+    this.run.integrity = this.run.integrityMax
     clearCheckpoint()
     this.suspended = null
     this.summary = null
@@ -672,7 +759,7 @@ export class Game {
     this.drafting = true
     this.draftTitle = title
     const ball = ballById(run.ballId)
-    this.offers = rollReward('relic', run.ballId, ball.primary, run.upgrades, run.relics, run.catalogue, run.seed, `draft:${run.loop}`)
+    this.offers = rollReward('relic', run.ballId, ball.primary, run.upgrades, run.relics, run.catalogue, run.seed, `draft:${run.loop}`, 3 + this.bonuses().draft)
     this.rememberOffers()
     if (!this.offers.length) { this.drafting = false; this.enterNode('workshop'); return }
     this.screen = 'choices'
@@ -719,14 +806,18 @@ export class Game {
     const anomaly = this.nodeAnomaly(node)
     if (anomaly) applyAnomaly(board, anomaly, 1 + run.loop * 0.15)
     if (run.ascension >= 1) for (const peg of board.pegs) if (peg.motion) peg.motion.amp *= 1.2
+    if (run.ascension >= 12) for (const peg of board.pegs) if (peg.motion) peg.motion.amp *= 1.25
     if (run.ascension >= 4) board.gapWidth *= 0.84
     board.payout *= 1 + run.ascension * 0.1 + Math.min(10, run.loop) * 0.18
+    if (run.ascension >= 13) board.payout *= 0.85
+    board.payout *= 1 + this.bonuses().yield
     if (node.encounter) applyEncounter(board, node.encounter)
     this.recompute()
     for (const feature of this.practice ? [] : board.features) {
       if (!this.save.seenParts.includes(feature)) this.save.seenParts.push(feature)
     }
     this.drop = new Drop(board, run.ballId, run.profile, run.integrity, run.integrityMax)
+    this.dress(this.drop, run.ballId)
     if (!this.practice) this.lastMachine = {
       seed: run.seed, ballId: run.ballId, node: { ...node }, upgrades: [...run.upgrades], relics: [...run.relics],
       integrity: run.integrity, integrityMax: run.integrityMax, ascension: run.ascension, loop: run.loop,
@@ -780,6 +871,7 @@ export class Game {
     if (drop.wonBoss) { run.bossWin = true; run.clears++ }
     this.save.lifetime.pegs += drop.pegs
     this.save.lifetime.golds += drop.golds
+    this.trackDrop(drop, run)
     const fulfilled = COMMISSIONS.filter(c => run.commissions.includes(c.id) && !run.claimed.includes(c.id) && run[c.stat] >= c.target)
     for (const commission of fulfilled) {
       run.claimed.push(commission.id)
@@ -850,6 +942,7 @@ export class Game {
     this.sfx.ui()
     if (offer.kind === 'upgrade') run.upgrades.push(offer.id)
     else run.relics.push(offer.id)
+    this.feel('gold')
     this.recompute()
     if (this.drafting) { this.drafting = false; this.enterNode('workshop') }
     else this.advance()
@@ -915,7 +1008,7 @@ export class Game {
     const run = this.run
     if (!run) return
     if (run.integrity < run.integrityMax) {
-      const amount = run.nodes[run.nodeId]?.repairAmount ?? 1
+      const amount = this.repairAmount()
       run.integrity = Math.min(run.integrityMax, run.integrity + amount)
       this.say('Mended', amount >= 99 ? 'The next act begins with a whole shell.' : `Restore up to ${amount} shell.`, 1, false)
     } else {
@@ -926,14 +1019,34 @@ export class Game {
     this.advance()
   }
 
+  private repairAmount(): number {
+    const run = this.run
+    const amount = run?.nodes[run.nodeId]?.repairAmount ?? 1
+    return run && run.ascension >= 9 && amount >= 99 ? 2 : amount
+  }
+
   private recompute(): void {
     const run = this.run
     if (!run) return
     const prev = run.integrityMax
     run.profile = computeProfile(run.ballId, run.upgrades, run.relics)
-    run.profile.gravityScale *= 1 + Math.min(6, run.loop) * 0.035
+    // Endless pressure: circuits keep getting harder in small, announced steps.
+    run.profile.gravityScale *= Math.min(1.5, 1 + Math.min(6, run.loop) * 0.035 + Math.max(0, run.loop - 6) * 0.02)
+    const chart = this.bonuses()
+    run.profile.maxNudges += chart.nudge
+    run.profile.integrityMax += chart.shell
+    run.profile.comboWindow += chart.combo
+    run.profile.pegsToCharge -= chart.reactor
     if (run.ascension >= 2) run.profile.maxNudges = Math.max(1, run.profile.maxNudges - 1)
     if (run.ascension >= 5) run.profile.integrityMax = Math.max(1, run.profile.integrityMax - 1)
+    if (run.ascension >= 7) run.profile.comboWindow = Math.max(0.6, run.profile.comboWindow - 0.15)
+    if (run.ascension >= 8) run.profile.gravityScale *= 1.06
+    if (run.ascension >= 10) run.profile.overdriveMax = 1
+    if (run.ascension >= 14) run.profile.maxNudges = Math.max(1, run.profile.maxNudges - 1)
+    if (run.ascension >= 15) run.profile.integrityMax = Math.max(1, run.profile.integrityMax - 1)
+    if (run.loop >= 3) run.profile.integrityMax = Math.max(1, run.profile.integrityMax - 1)
+    if (run.loop >= 6) run.profile.maxNudges = Math.max(1, run.profile.maxNudges - 1)
+    if (run.loop >= 9) run.profile.overdriveMax = Math.min(run.profile.overdriveMax, 1)
     const delta = run.profile.integrityMax - prev
     run.integrityMax = run.profile.integrityMax
     run.integrity = clamp(run.integrity + delta, 1, run.integrityMax)
@@ -945,7 +1058,7 @@ export class Game {
     if (!run) return this.toHub()
     if (!run.launchedOnce) return this.toHub()
     if (win) this.learnLore('grinder')
-    const gained = shardsFor(run.score, run.drops, win) + run.claimed.length * 4 + Math.max(0, run.clears - 1) * 8
+    const gained = Math.round((shardsFor(run.score, run.drops, win) + run.claimed.length * 4 + Math.max(0, run.clears - 1) * 8) * (1 + this.bonuses().shards))
     this.save.shards += gained
     this.save.runs += 1
     const beforeBest = this.save.bestScore
@@ -963,7 +1076,7 @@ export class Game {
     }
     this.save.history = [record, ...this.save.history].slice(0, 20)
     const mastered = this.save.mastery[run.ballId] ?? 0
-    const earnedTrial = run.clears > 0 && run.mode === 'expedition' && run.ascension === mastered && mastered < 6
+    const earnedTrial = run.clears > 0 && run.mode === 'expedition' && run.ascension === mastered && mastered < MAX_TRIAL
     if (earnedTrial) this.save.mastery[run.ballId] = mastered + 1
     if (run.mode === 'daily') {
       const rawDate = run.seed.slice(3)
@@ -994,8 +1107,10 @@ export class Game {
       jackpots: run.jackpots,
       ballId: run.ballId,
     })
+    const progress = this.grantProgress(run, win)
     const next = this.nextSchematic()
     this.summary = {
+      progress,
       heading: win ? 'The Grinder falls' : 'Run complete',
       line: win
         ? this.drop?.dead ? 'The core broke. The shell did not survive the landing.' : 'The Helix is quieter for a moment.'
@@ -1069,6 +1184,7 @@ export class Game {
   }
 
   private toHub(): void {
+    this.refreshQuests()
     this.practice = null
     this.clearControls()
     this.screen = 'hub'
@@ -1085,6 +1201,140 @@ export class Game {
     this.snapCam = true
   }
 
+  /** Starts fresh quest books when the UTC day or week turns over. Nothing is lost by skipping days. */
+  private refreshQuests(): void {
+    const day = dayKey()
+    const week = weekKey()
+    if (this.save.daily.key !== day) this.save.daily = { key: day, progress: {}, claimed: [] }
+    if (this.save.weekly.key !== week) this.save.weekly = { key: week, progress: {}, claimed: [] }
+  }
+
+  /** Every surviving or failed machine advances quests and lifetime counters. Practice never does. */
+  private trackDrop(drop: Drop, run: Run): void {
+    if (this.practice) return
+    const survived = !drop.dead && drop.captured !== null
+    const node = run.nodes[run.nodeId]
+    run.overdrives = (run.overdrives ?? 0) + drop.overdriveUses
+    if (drop.encounterComplete) run.guardians = (run.guardians ?? 0) + 1
+    this.save.lifetime.overdrives += drop.overdriveUses
+    if (drop.encounterComplete) this.save.lifetime.guardians += 1
+    if (survived && node?.kind !== 'boss') this.save.lifetime.machines += 1
+    if (drop.wonBoss) { this.save.lifetime.wins += 1; this.save.lifetime.machines += 1 }
+    const delta: Partial<Record<QuestStat, number>> = {
+      pegs: drop.pegs, golds: drop.golds, combo: drop.peakCombo,
+      machines: (survived && node?.kind !== 'boss') || drop.wonBoss ? 1 : 0,
+      jackpots: drop.jackpot ? 1 : 0, overdrives: drop.overdriveUses,
+      guardians: drop.encounterComplete ? 1 : 0,
+      clean: !drop.dead && drop.hazardThis === 0 && drop.captured && drop.captured !== 'hazard' ? 1 : 0,
+      shatters: drop.shatters, wins: drop.wonBoss ? 1 : 0,
+      gears: Math.max(0, drop.earned), nudges: drop.nudgeUses,
+    }
+    this.refreshQuests()
+    const finished: { q: QuestDef; weekly: boolean }[] = [
+      ...advanceQuests(this.save.daily, questDefs('daily', this.save.daily.key), delta).map(q => ({ q, weekly: false })),
+      ...advanceQuests(this.save.weekly, questDefs('weekly', this.save.weekly.key), delta).map(q => ({ q, weekly: true })),
+    ]
+    for (const { q, weekly } of finished) {
+      const reward = weekly ? WEEKLY_QUEST_REWARD : DAILY_QUEST_REWARD
+      this.save.stardust += reward.dust
+      this.grantRankXp(reward.xp)
+      this.questNews.push(`${weekly ? 'Weekly' : 'Daily'} quest · ${q.text} · +${reward.dust} stardust`)
+    }
+    if (finished.length) {
+      this.say('Quest complete', this.questNews[this.questNews.length - 1].replace(/^(Daily|Weekly) quest · /, ''), 1.8, false)
+      this.sfx.gold(5)
+      this.feel('level')
+    }
+  }
+
+  private grantRankXp(amount: number): number[] {
+    const state = { level: this.save.level, xp: this.save.xp }
+    const levels = addXp(state, amount, rankXp)
+    this.save.level = state.level
+    this.save.xp = state.xp
+    for (const level of levels) this.save.stardust += rankReward(level)
+    return levels
+  }
+
+  /** Claims every feat tier the lifetime record already satisfies. */
+  private claimFeats(): { name: string; dust: number }[] {
+    const values: Record<string, number> = {
+      pegs: this.save.lifetime.pegs, golds: this.save.lifetime.golds, machines: this.save.lifetime.machines,
+      runs: this.save.runs, wins: this.save.lifetime.wins, jackpots: this.save.lifetime.jackpots,
+      overdrives: this.save.lifetime.overdrives, guardians: this.save.lifetime.guardians,
+      combo: this.save.bestCombo, score: this.save.bestScore,
+      depth: Math.max(0, ...Object.values(this.save.deepest)),
+    }
+    const out: { name: string; dust: number }[] = []
+    for (const def of FEATS) {
+      const claimed = this.save.feats[def.id] ?? 0
+      const p = featProgress(def, values[def.id] ?? 0, claimed)
+      for (let tier = claimed; tier < p.tier; tier++) {
+        const dust = featReward(tier)
+        this.save.stardust += dust
+        out.push({ name: `${def.name} ${toRomanTier(tier + 1)}`, dust })
+      }
+      if (p.tier > claimed) this.save.feats[def.id] = p.tier
+    }
+    return out
+  }
+
+  /** XP, stardust, mastery, depth bounties, feats, and win stickers for a finished expedition. */
+  private grantProgress(run: Run, win: boolean): ProgressModel {
+    const chart = this.bonuses()
+    const outcome = { score: run.score, machines: run.drops, win, clears: run.clears, pure: !!run.pure, trial: run.ascension }
+    const dust = stardustFor(outcome, chart.resonance)
+    const xp = xpFor(outcome, chart.insight)
+    const before = { level: this.save.level, xp: this.save.xp }
+    const levels = this.grantRankXp(xp)
+    const levelDust = levels.reduce((sum, level) => sum + rankReward(level), 0)
+    this.save.stardust += dust
+    // Sphere mastery uses the same XP. Finishes unlock at fixed mastery levels.
+    const sphere = this.save.sphereLevels[run.ballId] ?? { level: 1, xp: 0 }
+    const sphereBefore = sphere.level
+    const sphereLevels = addXp(sphere, xp, masteryXp)
+    this.save.sphereLevels[run.ballId] = sphere
+    const finishes = (FINISHES[run.ballId] ?? []).filter(f => f.level > sphereBefore && f.level <= sphere.level).map(f => f.name)
+    // A new endless depth pays once per sphere, so repeating shallow circuits cannot farm it.
+    let depth = 0
+    const deepest = this.save.deepest[run.ballId] ?? 0
+    if (run.clears > deepest && run.mode === 'expedition') {
+      for (let d = deepest + 1; d <= run.clears; d++) depth += depthBounty(d)
+      this.save.deepest[run.ballId] = run.clears
+      this.save.stardust += depth
+    }
+    if (win || run.clears > 0) {
+      for (const id of [...run.relics, ...run.upgrades]) this.save.stickers[id] = Math.max(this.save.stickers[id] ?? 0, run.ascension + 1)
+    }
+    const feats = this.claimFeats()
+    const news = [...this.questNews]
+    this.questNews = []
+    return {
+      xp, dust, levelDust, depthDust: depth, depthRecord: depth ? run.clears : 0,
+      levelBefore: before.level, levelAfter: this.save.level,
+      xpBefore: before.xp / rankXp(before.level), xpAfter: this.save.xp / rankXp(this.save.level),
+      title: rankTitle(this.save.level),
+      sphere: ballById(run.ballId).name, sphereLevel: sphere.level, sphereUp: sphereLevels.length > 0, finishes,
+      feats: feats.map(f => `${f.name} · +${f.dust}`), quests: news, pure: !!run.pure,
+      stardust: this.save.stardust,
+    }
+  }
+
+  private buyStar(id: string): void {
+    const node = starNode(id)
+    if (!node) return
+    const level = this.save.chart[id] ?? 0
+    if (level >= node.max) return
+    const cost = starCost(node, level)
+    if (this.save.stardust < cost) return
+    this.save.stardust -= cost
+    this.save.chart[id] = level + 1
+    writeSave(this.save)
+    this.sfx.gold(3)
+    this.feel('gold')
+    this.selectedPulse++
+  }
+
   private learnLore(id: string): void {
     if (!this.save.lore.includes(id) && LORE[id]) this.save.lore.push(id)
   }
@@ -1094,7 +1344,7 @@ export class Game {
     if (!run) return []
     const ball = ballById(run.ballId)
     const act = run.nodes[run.nodeId]?.sector ?? 1
-    return rollShop(run.ballId, ball.primary, run.upgrades, run.relics, run.catalogue, run.seed, `shop:${run.loop}:${run.nodeId}:${this.rerolls}`).map(o => ({ ...o, price: Math.round(o.price * (1 + (act - 1) * 1.1) * (run.ascension >= 3 ? 1.25 : 1) * (1 + Math.min(10, run.loop) * 0.12)) }))
+    return rollShop(run.ballId, ball.primary, run.upgrades, run.relics, run.catalogue, run.seed, `shop:${run.loop}:${run.nodeId}:${this.rerolls}`).map(o => ({ ...o, price: Math.round(o.price * (1 + (act - 1) * 1.1) * (run.ascension >= 3 ? 1.25 : 1) * (run.ascension >= 11 ? 1.2 : 1) * (1 + Math.min(10, run.loop) * 0.12) * (1 - this.bonuses().discount)) }))
   }
 
   private continueCircuit(): void {
@@ -1110,8 +1360,21 @@ export class Game {
     this.openDraft(`Circuit ${run.loop + 1} · keep your build, choose a new relic`)
   }
 
+  /** What the next circuit adds, so the push-your-luck choice is explicit. */
+  private nextPressure(): string {
+    const next = (this.run?.loop ?? 0) + 1
+    const bits = ['stronger gravity', 'more anomalies', 'richer payouts', 'dearer shops']
+    if (next === 3) bits.unshift('one less maximum shell')
+    if (next === 6) bits.unshift('one fewer nudge')
+    if (next === 9) bits.unshift('a single Overdrive per machine')
+    return bits.join(' · ')
+  }
+
+  private maxRerolls(): number { return 2 + this.bonuses().rerolls }
+  private rerollCost(): number { return this.rerolls < this.bonuses().rerolls ? 0 : TUNING.shopReroll }
+
   private shopRepairCost(): number {
-    return 35 * (this.run?.nodes[this.run.nodeId]?.sector ?? 1)
+    return Math.round(35 * (this.run?.nodes[this.run.nodeId]?.sector ?? 1) * (1 - this.bonuses().repair))
   }
 
   private eventModel(): { title: string; story: string; cards: ChoiceCard[] } {
@@ -1200,7 +1463,7 @@ export class Game {
       const rules: RulesVersion = r.rules ?? 2
       if (!BALLS[r.ballId] || !r.seed || cleanSeed(r.seed) !== r.seed || !['expedition', 'daily'].includes(r.mode)) throw new Error('identity')
       for (const key of ['gears', 'score', 'integrity', 'integrityMax', 'drops', 'bestCombo', 'bestMult', 'shatters', 'portals', 'jackpots', 'boardNonce', 'ascension', 'loop', 'clears', 'cleanDrops', 'golds', 'pegs'] as const) if (!Number.isFinite(r[key]) || r[key] < 0) throw new Error('counters')
-      if (r.ascension > 6 || r.integrity < 1 || r.loop > 10000) throw new Error('limits')
+      if (r.ascension > MAX_TRIAL || r.integrity < 1 || r.loop > 10000 || r.clears > r.loop + 1) throw new Error('limits')
       for (const key of ['upgrades', 'relics', 'catalogue', 'commissions', 'claimed', 'visited'] as const) if (!Array.isArray(r[key]) || r[key].some(v => typeof v !== 'string') || r[key].length > 200) throw new Error('inventory')
       if (r.relics.some(id => !RELICS[id]) || r.upgrades.some(id => !UPGRADES[id])) throw new Error('catalogue')
       const route = createRoute(rngFor(r.seed, `route:${r.loop}`), { loop: r.loop, ascension: r.ascension, rules })
@@ -1209,7 +1472,7 @@ export class Game {
       this.recompute()
       this.drafting = !!data.drafting
       this.draftTitle = String(data.draftTitle || '')
-      this.rerolls = clamp(Number(data.rerolls) || 0, 0, 2)
+      this.rerolls = clamp(Number(data.rerolls) || 0, 0, this.maxRerolls())
       this.offers = Array.isArray(data.offers) ? data.offers.filter(o => o && (o.kind === 'relic' ? RELICS[o.id] : UPGRADES[o.id]) && typeof o.name === 'string' && typeof o.text === 'string' && Array.isArray(o.tags) && Number.isFinite(o.price)) : []
       if (data.screen === 'aim') this.beginAim(route.nodes[r.nodeId])
       else { this.drop = null; this.screen = data.screen }
@@ -1319,6 +1582,14 @@ export class Game {
     else if (e.type === 'peg') this.trauma = Math.min(1, this.trauma + 0.06)
     if (big && e.type !== 'overdrive-ready' && !relayEvent && this.drop) this.drop.hitstop = Math.max(this.drop.hitstop, e.type === 'jackpot' ? 0.09 : 0.04)
     else if (e.type === 'gold' && this.drop) this.drop.hitstop = Math.max(this.drop.hitstop, 0.018)
+    if (e.type === 'jackpot') this.feel('jackpot')
+    else if (e.type === 'hazard' || e.type === 'shatter-ball') this.feel('hurt')
+    else if (e.type === 'overdrive-start') this.feel('overdrive')
+    else if (e.type === 'core' || e.type === 'encounter-clear') this.feel('jackpot')
+    else if (e.type === 'bumper' || e.type === 'echo' || e.type === 'seal' || e.type === 'shatter') this.feel('bump')
+    else if (e.type === 'gold' || e.type === 'crit') this.feel('gold')
+    else if (e.type === 'flip') this.feel('flip')
+    else if (e.type === 'peg' || e.type === 'spring') this.feel('tick')
     if (e.type === 'relay-hit' && this.drop?.board.encounter) {
       const index = this.drop.board.bumpers.find(b => b.relay != null && b.x === e.x && b.y === e.y)?.relay ?? this.drop.lastRelay
       this.sfx.relay(this.drop.board.encounter.id, index)
@@ -1581,6 +1852,13 @@ export class Game {
       this.resolveCopy.title,
       this.practice?.attempt ?? '',
       this.practice?.recipe.node.id ?? '',
+      this.save.stardust,
+      this.save.level,
+      this.save.chartOn,
+      this.save.settings.haptics,
+      this.save.settings.quality,
+      JSON.stringify(this.save.finish),
+      this.questKey(),
     ]
     return base.join('|')
   }
@@ -1634,7 +1912,7 @@ export class Game {
       anomaly: this.nodeAnomaly(this.run.nodes[this.run.nodeId]) ? ANOMALIES[this.nodeAnomaly(this.run.nodes[this.run.nodeId])!].name : '',
       charge: drop.charge,
       overdriveTime: drop.overdriveTime,
-      overdriveUses: Math.max(0, 2 - drop.overdriveUses),
+      overdriveUses: Math.max(0, drop.profile.overdriveMax - drop.overdriveUses),
       overdriveReady: this.screen === 'drop' && drop.overdriveReady,
       overview: this.overview,
       encounter: this.encounterModel(),
@@ -1659,7 +1937,7 @@ export class Game {
             name: ball.name,
             tagline: ball.tagline,
             tags: ball.tags.join(' · '),
-            colors: [ball.accent, ball.color, ball.core],
+            colors: ((f) => f ? [f.accent, f.color, f.core] as [string, string, string] : [ball.accent, ball.color, ball.core] as [string, string, string])(finishFor(ball.id, this.save.finish[ball.id], this.sphereLevel(ball.id))),
             locked: !this.save.balls.includes(ball.id) && this.sharedBall !== ball.id,
             reason: ball.id === 'prism' ? 'Awakens after your first fall.' : 'Reach the Gravity Core, or finish two falls.',
             selected: (this.sharedBall || this.save.ball) === ball.id,
@@ -1680,7 +1958,24 @@ export class Game {
           dailyBest: this.save.dailyBest[`${dailyExpedition().date}@${CURRENT_RULES}`] ?? 0,
           shared: !!this.sharedBall || this.sharedDaily,
           legacy: this.sharedRules === 2 && (!!this.sharedBall || this.sharedDaily),
+          meta: this.metaModel(),
         }
+      case 'stars':
+        return {
+          kind: 'stars', stardust: this.save.stardust, on: this.save.chartOn,
+          nodes: STAR_NODES.map(node => {
+            const level = this.save.chart[node.id] ?? 0
+            const maxed = level >= node.max
+            const cost = maxed ? 0 : starCost(node, level)
+            return {
+              id: node.id, name: node.name, glyph: node.glyph, level, max: Number.isFinite(node.max) ? node.max : 0,
+              text: node.text(Math.max(1, level)), next: maxed ? '' : node.text(level + 1),
+              cost, maxed, afford: !maxed && this.save.stardust >= cost, endless: !Number.isFinite(node.max),
+            }
+          }),
+        }
+      case 'quests':
+        return this.questsStage()
       case 'help':
         return { kind: 'help' }
       case 'collection':
@@ -1688,6 +1983,9 @@ export class Game {
       case 'settings':
         return {
           kind: 'settings',
+          haptics: this.save.settings.haptics,
+          hapticsAvailable: this.haptics.available,
+          quality: this.save.settings.quality,
           shake: this.save.settings.shake,
           particles: this.save.settings.particles,
           flash: this.save.settings.flash,
@@ -1702,15 +2000,15 @@ export class Game {
           title: this.drafting ? this.draftTitle : this.offers[0]?.kind === 'relic' ? 'Keep one passenger' : 'Change the sphere',
           build: this.buildLine(),
           cards: this.choiceCards(false),
-          skip: this.drafting ? 'Trust the bare sphere' : 'Take 15 gears instead',
+          skip: this.drafting ? 'Trust the bare sphere' : run && run.ascension >= 11 ? 'Skip this reward' : 'Take 15 gears instead',
         }
       case 'shop':
         return {
           kind: 'shop',
           gears: run?.gears ?? 0,
           cards: this.choiceCards(true),
-          reroll: TUNING.shopReroll,
-          canReroll: !!run && run.gears >= TUNING.shopReroll && this.rerolls < 2,
+          reroll: this.rerollCost(),
+          canReroll: !!run && run.gears >= this.rerollCost() && this.rerolls < this.maxRerolls(),
           build: this.buildLine(),
           repairCost: this.shopRepairCost(),
           canRepair: !!run && run.integrity < run.integrityMax && run.gears >= this.shopRepairCost(),
@@ -1726,9 +2024,9 @@ export class Game {
           kind: 'repair',
           text:
             run && run.integrity < run.integrityMax
-              ? (run.nodes[run.nodeId].repairAmount ?? 1) >= 99 ? 'The keeper restores your entire shell before the next act.' : `Restore up to ${run.nodes[run.nodeId].repairAmount ?? 1} shell.`
+              ? this.repairAmount() >= 99 ? 'The keeper restores your entire shell before the next act.' : `Restore up to ${this.repairAmount()} shell.`
               : 'The shell is whole. The bench offers 12 gears of scrap instead.',
-          action: run && run.integrity < run.integrityMax ? (run.nodes[run.nodeId].repairAmount ?? 1) >= 99 ? 'Restore the whole shell' : 'Mend the shell' : 'Take the scrap',
+          action: run && run.integrity < run.integrityMax ? this.repairAmount() >= 99 ? 'Restore the whole shell' : 'Mend the shell' : 'Take the scrap',
         }
       case 'bargain':
         return { kind: 'bargain', canShell: !!run && run.integrity > 1, canPay: !!run && run.gears >= 30 }
@@ -1742,7 +2040,7 @@ export class Game {
       case 'event':
         return run ? { kind: 'event', ...this.eventModel() } : { kind: 'none' }
       case 'victory':
-        return { kind: 'victory', circuit: (run?.loop ?? 0) + 1, score: run?.score ?? 0, build: this.buildLine() }
+        return { kind: 'victory', circuit: (run?.loop ?? 0) + 1, score: run?.score ?? 0, build: this.buildLine(), pressure: this.nextPressure(), bounty: run && run.mode === 'expedition' && run.clears >= (this.save.deepest[run.ballId] ?? 0) ? depthBounty(run.clears + 1) : 0 }
       case 'journal':
         return this.journalStage()
       case 'history':
@@ -1753,6 +2051,58 @@ export class Game {
         return this.reveal ? { kind: 'reveal', ...this.reveal } : { kind: 'none' }
       default:
         return { kind: 'none' }
+    }
+  }
+
+  private questKey(): string {
+    const d = this.save.daily, w = this.save.weekly
+    return `${d.key}:${d.claimed.length}:${Object.values(d.progress).join(',')}|${w.key}:${w.claimed.length}`
+  }
+
+  private metaModel() {
+    const ball = this.sharedBall || this.save.ball
+    const level = this.sphereLevel(ball)
+    const sphere = this.save.sphereLevels[ball] ?? { level: 1, xp: 0 }
+    const daily = questDefs('daily', this.save.daily.key)
+    const weekly = questDefs('weekly', this.save.weekly.key)
+    return {
+      level: this.save.level, title: rankTitle(this.save.level),
+      xpT: clamp(this.save.xp / rankXp(this.save.level), 0, 1),
+      xp: this.save.xp, xpNext: rankXp(this.save.level),
+      stardust: this.save.stardust,
+      questsDone: daily.filter(q => this.save.daily.claimed.includes(q.id)).length + weekly.filter(q => this.save.weekly.claimed.includes(q.id)).length,
+      questsTotal: daily.length + weekly.length,
+      sphereLevel: level, sphereT: clamp(sphere.xp / masteryXp(sphere.level), 0, 1),
+      deepest: this.save.deepest[ball] ?? 0,
+      chartOn: this.save.chartOn,
+      chartLevels: Object.values(this.save.chart).reduce((a, b) => a + b, 0),
+      finishes: (FINISHES[ball] ?? []).map(f => ({ id: f.id, name: f.name, level: f.level, color: f.color, accent: f.accent, core: f.core, unlocked: f.level <= level, selected: (finishFor(ball, this.save.finish[ball], level)?.id ?? '') === f.id })),
+    }
+  }
+
+  private questsStage(): StageModel {
+    this.refreshQuests()
+    const book = (kind: 'daily' | 'weekly') => {
+      const b = kind === 'daily' ? this.save.daily : this.save.weekly
+      const reward = kind === 'daily' ? DAILY_QUEST_REWARD : WEEKLY_QUEST_REWARD
+      return questDefs(kind, b.key).map(q => ({ text: q.text, value: Math.min(q.target, b.progress[q.id] ?? 0), target: q.target, done: b.claimed.includes(q.id), reward: `+${reward.dust} stardust · +${reward.xp} XP` }))
+    }
+    const values: Record<string, number> = {
+      pegs: this.save.lifetime.pegs, golds: this.save.lifetime.golds, machines: this.save.lifetime.machines,
+      runs: this.save.runs, wins: this.save.lifetime.wins, jackpots: this.save.lifetime.jackpots,
+      overdrives: this.save.lifetime.overdrives, guardians: this.save.lifetime.guardians,
+      combo: this.save.bestCombo, score: this.save.bestScore, depth: Math.max(0, ...Object.values(this.save.deepest)),
+    }
+    const now = new Date()
+    const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+    const hours = Math.max(0, Math.ceil((reset.getTime() - now.getTime()) / 3600000))
+    return {
+      kind: 'quests', daily: book('daily'), weekly: book('weekly'), resetHours: hours,
+      feats: FEATS.map(def => {
+        const tier = this.save.feats[def.id] ?? 0
+        const target = def.target(tier)
+        return { name: `${def.name} ${toRoman(tier + 1)}`, text: def.text(target), value: Math.min(target, values[def.id] ?? 0), target, tier, reward: featReward(tier) }
+      }),
     }
   }
 
@@ -1774,7 +2124,8 @@ export class Game {
         const seen = this.save.seenRelics.includes(relic.id)
         if (!researched) return { name: relic.name, text: relic.lockHint || 'Locked schematic.', known: false }
         if (!seen) return { name: relic.name, text: 'In the machine. Not yet offered.', known: false }
-        return { name: relic.name, text: relic.text, known: true }
+        const sticker = this.save.stickers[relic.id]
+        return { name: sticker ? `${relic.name} · won at Trial ${sticker - 1}` : relic.name, text: relic.text, known: true }
       }),
       parts: PARTS.map((part) => ({
         name: part.name,
@@ -1873,11 +2224,50 @@ export class Game {
       return
     }
     if (act === 'overview') { this.toggleOverview(); return }
+    if (act === 'stars' || act === 'quests') {
+      if (!this.menu()) return
+      this.returnTo = 'hub'
+      this.screen = act
+      this.sfx.ui()
+      this.selectedPulse++
+      return
+    }
+    if (act.startsWith('star:') && this.screen === 'stars') { this.buyStar(act.slice(5)); return }
+    if (act === 'chart-toggle') {
+      this.save.chartOn = !this.save.chartOn
+      writeSave(this.save)
+      this.selectedPulse++
+      return
+    }
+    if (act.startsWith('finish:')) {
+      const id = act.slice(7)
+      const ball = this.sharedBall || this.save.ball
+      const finish = (FINISHES[ball] ?? []).find(f => f.id === id)
+      if (!finish || finish.level > this.sphereLevel(ball)) return
+      this.save.finish[ball] = id
+      writeSave(this.save)
+      this.sfx.ui()
+      this.feel('ui')
+      this.selectedPulse++
+      return
+    }
+    if (act.startsWith('quality:')) {
+      const q = act.slice(8)
+      if (q === 'auto' || q === 'high' || q === 'saver') {
+        this.save.settings.quality = q
+        this.dprCap = 2
+        this.frameSamples = 0
+        writeSave(this.save)
+        this.resize()
+        this.selectedPulse++
+      }
+      return
+    }
     if (act === 'launch') { this.launch(); return }
     if (act === 'start') {
       this.sfx.resume()
       this.sfx.ui()
-      this.startRun(this.draftSeed, this.sharedBall || this.save.ball, this.sharedDaily ? 'daily' : 'expedition', this.draftAscension, this.sharedCatalogue ?? undefined, this.sharedRules)
+      this.startRun(this.draftSeed, this.sharedBall || this.save.ball, this.sharedDaily ? 'daily' : 'expedition', this.draftAscension, this.sharedCatalogue ?? undefined, this.sharedRules, !!this.sharedBall || this.sharedDaily || !!this.sharedCatalogue)
       return
     }
     if (act === 'continue-run') { this.sfx.resume(); this.resumeExpedition(); return }
@@ -1971,7 +2361,7 @@ export class Game {
     if (act === 'skip') {
       if (this.screen === 'choices' && this.run) {
         if (this.drafting) { this.drafting = false; this.enterNode('workshop') }
-        else { this.run.gears += 15; this.advance() }
+        else { this.run.gears += this.run.ascension >= 11 ? 0 : 15; this.advance() }
       } else this.skipResolve()
       return
     }
@@ -1986,8 +2376,8 @@ export class Game {
       return
     }
     if (act === 'reroll') {
-      if (this.screen !== 'shop' || !this.run || this.run.gears < TUNING.shopReroll || this.rerolls >= 2) return
-      this.run.gears -= TUNING.shopReroll
+      if (this.screen !== 'shop' || !this.run || this.run.gears < this.rerollCost() || this.rerolls >= this.maxRerolls()) return
+      this.run.gears -= this.rerollCost()
       this.rerolls += 1
       this.offers = this.makeShop()
       this.rememberOffers()
@@ -1997,7 +2387,7 @@ export class Game {
       return
     }
     if (act === 'again' && this.summary) return this.startRun('', this.summary.ballId, 'expedition', Math.min(this.summary.ascension, this.save.mastery[this.summary.ballId] ?? 0))
-    if (act === 'retry' && this.summary) return this.startRun(this.summary.seed, this.summary.ballId, this.summary.mode, this.summary.ascension, this.summary.catalogue, this.summary.rules)
+    if (act === 'retry' && this.summary) return this.startRun(this.summary.seed, this.summary.ballId, this.summary.mode, this.summary.ascension, this.summary.catalogue, this.summary.rules, !!this.summary.progress?.pure && this.save.chartOn)
     if (act === 'hub') return this.toHub()
     if (act === 'study') return this.study()
     if (act === 'close-reveal') {
@@ -2048,9 +2438,11 @@ export class Game {
       return
     }
     if (act.startsWith('toggle:')) {
-      const key = act.slice(7) as 'shake' | 'particles' | 'flash' | 'large'
-      if (key === 'shake' || key === 'particles' || key === 'flash' || key === 'large') {
+      const key = act.slice(7) as 'shake' | 'particles' | 'flash' | 'large' | 'haptics'
+      if (key === 'shake' || key === 'particles' || key === 'flash' || key === 'large' || key === 'haptics') {
         this.save.settings[key] = !this.save.settings[key]
+        this.haptics.enabled = this.save.settings.haptics
+        if (key === 'haptics') this.feel('ui')
         document.documentElement.classList.toggle('lg', this.save.settings.large)
         writeSave(this.save)
         this.selectedPulse++

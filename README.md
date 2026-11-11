@@ -2,6 +2,36 @@
 
 A pachinko roguelite. The sphere falls through a living machine. You cannot hold it. You can still decide the fall.
 
+## The long game · v0.2
+
+PLUMB now rewards every expedition, keeps difficulty rising without a ceiling, and treats the phone as the primary device.
+
+**Progression that does not run out**
+
+- **Rank:** every finished expedition earns XP from machines survived, score, wins, and circuits. Levels follow a polynomial curve (100 · L^1.5 XP per level), so they slow down but never wall. Each level pays stardust, and every five levels grants a new title.
+- **Star Chart:** spend stardust on thirteen permanent upgrades. Ten are capped and modest (starting gears, +1 nudge, +1 shell, cheaper shops, free rerolls, a fourth starting relic, and others). Three are endless with asymptotic effects: board payouts approach +30%, XP approaches +50%, and stardust income approaches +50%. Costs grow geometrically. A toggle switches to purist expeditions that ignore the chart and pay +25% stardust.
+- **Fair comparisons:** daily constellations and shared challenge links always use pure rules, so a seed rebuilds the same machine on every profile.
+- **Sphere mastery:** each sphere levels from the same XP. Seven cosmetic finishes per sphere unlock at mastery 1, 3, 6, 10, 15, 22, and 30. Finishes change colors only; physics never reads them.
+- **Quests:** three daily and two weekly goals, seeded by the UTC date. They count expeditions and dailies (never practice) and pay the moment they complete. Missing a day costs nothing.
+- **Feats:** eleven lifetime milestones with endless geometric tiers, such as pegs struck, jackpots, Grinder wins, best combo, and depth.
+- **Win stickers:** the Archive marks the highest Trial at which each relic was part of a winning build.
+
+**Deeper difficulty**
+
+- **Trials 7–15:** each adds one rule: a shorter combo window, heavier gravity, thin benches, a single Overdrive, a tight purse, restless pegs, cold collectors, fewer nudges, and Eclipse.
+- **Endless circuits:** gravity keeps rising up to a cap. Circuit 3 removes a maximum shell, circuit 6 a nudge, and circuit 9 limits you to one Overdrive. The victory screen previews the next circuit's pressure. A new depth record pays a one-time stardust bounty per sphere, so shallow circuits cannot be farmed.
+
+**Mobile first**
+
+- **Game UI:** the whole presentation layer was rebuilt as one stylesheet (`src/game.css`) with bundled Lilita One and Fredoka fonts (OFL, offline). It uses chunky 3D buttons, outlined display type, tone-coded relic cards with icon gems, side-by-side safe and risky path cards, celebratory result and victory modals, and icon-first navigation. The home screen fits on one phone screen: rank, wallets, a floating sphere with a picker and finishes, Trial selector, a large Play button, Daily / Quests / Star Chart / Practice tiles, and a sticky bottom bar.
+- **Playfield:** the phone HUD has two compact header rows (shell, gears, multiplier, journal, pause, machine name and status) above the board, and color-coded thumb controls below it, with Overdrive in the center. Desktop keeps side docks beside the machine. Board palettes are brighter, and engraved micro-text was removed from the cabinet.
+- **Touch:** controls are at least 56 px tall, keyboard hints are hidden on touch screens, and on-screen copy describes touch input. Safe-area insets cover notches and home indicators. Pinch and double-tap zoom are suppressed, and so is pull-to-refresh.
+- **Haptics:** cues are throttled, can be toggled, and work on Android browsers and the Android app. iOS Safari ignores vibration, so every cue also has a sound and a visual.
+- **Performance:** the Auto graphics setting lowers canvas resolution when frames run long. Battery saver caps resolution and halves the menu frame rate. The full-board 50 px canvas shadow and the hub specimen's shadowed canvas render have been replaced. HUD backdrop blur is removed during play.
+- **Installable:** a web manifest and an offline service worker (production HTTPS only) let the web build run from the home screen.
+
+`npm run verify:progression` checks the curves, caps, quest seeding, feat tiers, and a pacing model. The expedition suite adds checks for Star Chart purity, purchases, high Trials, reward granting, one-time depth bounties, quests, and finishes.
+
 ## Read the fall · v0.1
 
 Open **Practice laboratory** from the hub to practice eight machines, including both guardians and the Grinder. Try any of the three spheres with a stock, control, or Arc & Rudder loadout. The machine stays seeded between attempts, controls retain their normal finite reserves, and results compare your gears with the previous attempt and session best. Practice preserves your saved expedition and archive; its scores and unlocks do not enter progression.

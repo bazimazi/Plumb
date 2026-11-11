@@ -34,9 +34,6 @@ export function drawMachineRelief(ctx: CanvasRenderingContext2D, board: Board, p
       panel(g, 85, y, board.w - 170, 182, 15)
       g.fillStyle = surface; g.fill()
       g.strokeStyle = pal.frame + '12'; g.lineWidth = 1; g.stroke()
-      g.fillStyle = pal.frame + '30'
-      g.font = '9px monospace'; g.textAlign = 'left'
-      g.fillText(`0${row + 1} / ${board.theme === 'foundry' ? 'HEAT SINK' : board.theme === 'gravity' ? 'FIELD ARRAY' : board.theme === 'grinder' ? 'SEAL ARRAY' : 'RESONANCE'}`, 102, y + 18)
       // Micro-perforation lends material scale without expensive frame-time noise.
       for (let xx = 104; xx < board.w - 100; xx += 18) {
         g.fillStyle = '#00000035'; g.fillRect(xx, y + 168, 2, 2)
@@ -138,17 +135,6 @@ export function drawReactor(ctx: CanvasRenderingContext2D, board: Board, drop: D
     }
   }
   ctx.globalAlpha = 1
-  // A top instrument plate anchors the machine identity and gives launch space hierarchy.
-  const title = board.encounter ? board.encounter.name.toUpperCase() : board.boss ? 'THE WORLD ENGINE' : board.theme === 'foundry' ? 'EMBER FOUNDRY' : board.theme === 'gravity' ? 'CELESTIAL VAULT' : 'ASTRAL CONSERVATORY'
-  const encounterSubtitle = board.encounter?.id === 'bellkeeper' ? 'THREE BELLS · ONE HARMONY' : 'ALTERNATE THE TWIN RELAYS'
-  for (const [x, text, sub] of [
-    [board.margin + 15, title, board.encounter ? encounterSubtitle : board.boss ? 'FIVE SEALS · ONE CORE' : 'HELIX / EXPEDITION ENGINE'],
-    [board.w - board.margin - 15, active ? 'OVERDRIVE' : drop.overdriveReady ? 'REACTOR READY' : 'REACTOR CHARGE', active ? '×2 CONTACT PAYOUT' : `${Math.round(charge * 100)}% / FIVE CONTACTS`],
-  ] as const) {
-    ctx.textAlign = x < board.w / 2 ? 'left' : 'right'
-    ctx.fillStyle = active ? '#fff1b3' : pal.frame
-    ctx.font = '700 12px Outfit, sans-serif'; ctx.fillText(text, x, 57)
-    ctx.fillStyle = pal.accent + 'a0'; ctx.font = '8px monospace'; ctx.fillText(sub, x, 73)
-  }
+  // Machine name and reactor state live in the HUD; the cabinet stays uncluttered.
   ctx.restore()
 }

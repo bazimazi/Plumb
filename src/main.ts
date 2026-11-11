@@ -1,3 +1,6 @@
+import '@fontsource/lilita-one/400.css'
+import '@fontsource-variable/fredoka/index.css'
+import './game.css'
 import { selfcheckPhysics } from './physics/collide'
 import { Game } from './game/game'
 import { isNativeApp } from './platform'
@@ -6,6 +9,13 @@ import { isNativeApp } from './platform'
 if (isNativeApp && !import.meta.env.DEV) {
   window.addEventListener('contextmenu', (e) => e.preventDefault())
 }
+
+// Installable, offline-capable web build. Native shells and dev servers skip it.
+if (!isNativeApp && !import.meta.env.DEV && 'serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => { void navigator.serviceWorker.register('./sw.js').catch(() => {}) })
+}
+// iOS Safari ignores user-scalable; block pinch zoom. touch-action: manipulation handles double-tap.
+document.addEventListener('gesturestart', (e) => e.preventDefault())
 
 const boot = document.getElementById('stage')
 try {

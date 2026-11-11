@@ -11,7 +11,7 @@ export default defineConfig({
   outputDir: 'artifacts/playwright-results',
   reporter: [['list'], ['html', { outputFolder: 'artifacts/playwright-report', open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:5174',
     trace: lightCapture ? 'off' : 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: lightCapture ? 'off' : 'retain-on-failure',
@@ -24,7 +24,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1',
-    url: 'http://127.0.0.1:5173',
+    url: 'http://127.0.0.1:5174',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },

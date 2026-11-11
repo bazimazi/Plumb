@@ -68,6 +68,8 @@ export interface DrawInput {
   time: number
   hitboxes: boolean
   showcase: BallDef | null
+  /** Draw the canvas specimen as well (off by default; it carries an expensive shadow). */
+  astrolabe?: boolean
 }
 
 const POP_LIFE = 0.28
@@ -195,7 +197,8 @@ export function drawFrame(input: DrawInput): void {
   const pal = PALETTE[board?.theme ?? 'workshop']
   drawAtmosphere(ctx, cssW, cssH, pal, input.time, input.particlesOn)
   if (input.showcase) {
-    drawAstrolabe(ctx, cssW, cssH, input.showcase, input.time)
+    // The home screen presents the specimen in the DOM; the canvas keeps only the sky behind it.
+    if (input.astrolabe) drawAstrolabe(ctx, cssW, cssH, input.showcase, input.time)
   } else if (board && input.drop) {
     ctx.save()
     ctx.translate(cssW / 2 + cam.shakeX, cssH / 2 + cam.shakeY)
@@ -244,10 +247,14 @@ function drawCabinet(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pa
     }
     ctx.restore()
   }
+  // Layered offsets fake the cabinet's drop shadow; a 50px shadowBlur over the whole
+  // board was the single most expensive raster operation per frame on phones.
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.6)'
-  ctx.shadowBlur = 50
-  ctx.shadowOffsetY = 18
+  for (const [grow, drop, alpha] of [[26, 26, 0.12], [14, 20, 0.18], [5, 12, 0.26]] as const) {
+    roundRect(ctx, x - grow, y - grow + drop, w + grow * 2, h + grow * 2, 28 + grow)
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`
+    ctx.fill()
+  }
   roundRect(ctx, x, y, w, h, 28)
   ctx.fillStyle = pal.felt
   ctx.fill()
@@ -392,7 +399,7 @@ function drawChainReadout(ctx: CanvasRenderingContext2D, drop: Drop, pal: Palett
   ctx.save()
   ctx.textAlign = side > 0 ? 'left' : 'right'
   ctx.textBaseline = 'middle'
-  ctx.font = '800 21px Outfit, sans-serif'
+  ctx.font = '800 21px "Fredoka Variable", Fredoka, system-ui, sans-serif'
   ctx.strokeStyle = '#03090ff0'; ctx.lineWidth = 5
   const label = `${drop.combo} CHAIN`
   ctx.strokeText(label, x, b.y - 15)
@@ -651,7 +658,7 @@ function drawGuardianRelay(ctx: CanvasRenderingContext2D, b: Bumper, flash: numb
     ctx.strokeStyle = pal.gold; ctx.lineWidth = 3; ctx.lineCap = 'round'
     ctx.beginPath(); ctx.moveTo(-r * .25, 0); ctx.lineTo(-r * .04, r * .2)
     ctx.lineTo(r * .35, -r * .25); ctx.stroke()
-    ctx.font = '700 11px Outfit, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = pal.gold
+    ctx.font = '700 11px "Fredoka Variable", Fredoka, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = pal.gold
     ctx.fillText(['I', 'II', 'III'][id] ?? String(id + 1), 0, r + 27)
     ctx.restore(); return
   }
@@ -725,7 +732,7 @@ function drawGuardianRelay(ctx: CanvasRenderingContext2D, b: Bumper, flash: numb
 
   // Large glyphs and explicit marks distinguish NEXT, credited, and idle targets.
   const label = ['I', 'II', 'III'][id] ?? String(id + 1)
-  ctx.font = `800 ${Math.max(13, r * .43)}px Outfit, sans-serif`
+  ctx.font = `800 ${Math.max(13, r * .43)}px "Fredoka Variable", Fredoka, system-ui, sans-serif`
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   ctx.strokeStyle = '#02070c'; ctx.lineWidth = 4
   ctx.strokeText(label, 0, r * .64); ctx.fillStyle = credited ? pal.gold : '#f3f8ec'; ctx.fillText(label, 0, r * .64)
@@ -742,7 +749,7 @@ function drawGuardianRelay(ctx: CanvasRenderingContext2D, b: Bumper, flash: numb
     }
     if (!bell) {
       ctx.fillStyle = '#03131a'; roundRect(ctx, -23, -rr - 22, 46, 17, 4); ctx.fill()
-      ctx.fillStyle = cyan; ctx.font = '800 11px Outfit, sans-serif'; ctx.fillText('NEXT', 0, -rr - 13)
+      ctx.fillStyle = cyan; ctx.font = '800 11px "Fredoka Variable", Fredoka, system-ui, sans-serif'; ctx.fillText('NEXT', 0, -rr - 13)
       ctx.beginPath(); ctx.moveTo(-4, -rr - 3); ctx.lineTo(0, -rr + 2); ctx.lineTo(4, -rr - 3); ctx.lineWidth = 1.5; ctx.stroke()
     }
   }
@@ -1041,7 +1048,7 @@ function drawBins(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
         ctx.fill()
       }
     }
-    ctx.font = '700 13px Outfit, sans-serif'
+    ctx.font = '700 13px "Fredoka Variable", Fredoka, system-ui, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.globalAlpha = hot ? 1 : armed ? 0.7 + 0.3 * pulse : 0.65
@@ -1420,7 +1427,7 @@ function drawFloaters(ctx: CanvasRenderingContext2D, floaters: Floater[]) {
     const size = (f.size ?? 18) * pop
     const left = f.life / f.max
     ctx.globalAlpha = left < 0.35 ? left / 0.35 : 1
-    ctx.font = `800 ${size.toFixed(1)}px Outfit, sans-serif`
+    ctx.font = `800 ${size.toFixed(1)}px "Fredoka Variable", Fredoka, system-ui, sans-serif`
     ctx.lineWidth = Math.max(3, size * 0.22)
     ctx.strokeStyle = 'rgba(8,6,4,0.85)'
     ctx.strokeText(f.text, f.x, f.y)

@@ -7,7 +7,7 @@ export default defineConfig({
   // Keep Rust compiler output visible when running under `tauri dev`.
   clearScreen: false,
   server: {
-    port: 5173,
+    port: 5174,
     // Tauri expects the dev server at a fixed URL (see src-tauri/tauri.conf.json).
     strictPort: true,
     host: host || false,

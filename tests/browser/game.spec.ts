@@ -117,6 +117,7 @@ test('hub, seed editor and settings remain usable without external fonts', async
   await expect(page.getByRole('heading', { name: 'PLUMB', exact: true })).toBeVisible()
   await cleanLayout(page)
   await capture(page, info, 'hub')
+  await page.locator('.home-options summary').click()
   await page.locator('[data-seed]').fill('MYSEED42')
   await page.locator('[data-seed]').press('Enter')
   await expect(page.locator('#app')).toHaveAttribute('data-mode', 'hub')

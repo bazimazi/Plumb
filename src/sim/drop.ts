@@ -46,7 +46,8 @@ const EMPTY: Cmd = { nudge: 0, flip: false, special: false, tilt: false, aimX: 0
 
 export class Drop {
   readonly board: Board
-  readonly ballDef: BallDef
+  /** Colors may be restyled by a cosmetic finish; physics reads only `launch`. */
+  ballDef: BallDef
   readonly profile: Profile
   ball: Ball
   launched = false
@@ -212,7 +213,7 @@ export class Drop {
   }
 
   get overdriveReady(): boolean {
-    return this.charge >= 1 && this.overdriveTime <= 0 && this.overdriveUses < OVERDRIVE.maxUses && this.launched && !this.captured && !this.dead
+    return this.charge >= 1 && this.overdriveTime <= 0 && this.overdriveUses < this.profile.overdriveMax && this.launched && !this.captured && !this.dead
   }
 
   get encounterTargets(): number[] {
@@ -382,8 +383,8 @@ export class Drop {
   }
 
   private chargeReactor(x: number, y: number): void {
-    if (this.overdriveUses >= OVERDRIVE.maxUses || this.charge >= 1) return
-    this.charge = Math.min(1, this.charge + 1 / OVERDRIVE.pegsToCharge)
+    if (this.overdriveUses >= this.profile.overdriveMax || this.charge >= 1) return
+    this.charge = Math.min(1, this.charge + 1 / this.profile.pegsToCharge)
     this.events.push({ type: 'overdrive-charge', x, y })
     if (this.overdriveReady) this.events.push({ type: 'overdrive-ready', x, y, text: 'OVERDRIVE READY', big: true })
   }
