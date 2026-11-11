@@ -195,7 +195,7 @@ export interface RouteItem {
 
 export type StageModel =
   | { kind: 'none' }
-  | { kind: 'hub'; balls: BallCard[]; shards: number; best: number; runs: number; seed: string; study: string; canStudy: boolean; tick: number; resume: boolean; trial: number; maxTrial: number; trialText: string; dailyDate: string; dailySphere: string; dailyBest: number; shared: boolean; legacy?: boolean; meta?: MetaModel }
+  | { kind: 'hub'; balls: BallCard[]; shards: number; best: number; runs: number; seed: string; study: string; canStudy: boolean; tick: number; resume: boolean; confirm?: string; trial: number; maxTrial: number; trialText: string; dailyDate: string; dailySphere: string; dailyBest: number; shared: boolean; legacy?: boolean; meta?: MetaModel }
   | { kind: 'stars'; stardust: number; on: boolean; nodes: StarCard[] }
   | { kind: 'quests'; daily: QuestRow[]; weekly: QuestRow[]; resetHours: number; feats: { name: string; text: string; value: number; target: number; tier: number; reward: number }[] }
   | { kind: 'help' }
@@ -207,7 +207,7 @@ export type StageModel =
   | { kind: 'repair'; text: string; action: string }
   | { kind: 'bargain'; canShell: boolean; canPay: boolean }
   | { kind: 'resolve'; title: string; sub: string; earned: number; tone: 'good' | 'bad' | 'gold' }
-  | { kind: 'pause'; practice?: boolean }
+  | { kind: 'pause'; practice?: boolean; canSave?: boolean }
   | { kind: 'laboratory'; lab: LabModel }
   | { kind: 'practice-result'; report: DropReport; attempt: number; best: number; comparison: number | null }
   | { kind: 'runend'; summary: SummaryModel }
@@ -215,7 +215,7 @@ export type StageModel =
   | { kind: 'event'; title: string; story: string; cards: ChoiceCard[] }
   | { kind: 'victory'; circuit: number; score: number; build: string; pressure?: string; bounty?: number }
   | { kind: 'history'; records: { seed: string; sphere: string; score: number; drops: number; clears: number; mode: string; date: string; index: number; trial: number; build: string }[] }
-  | { kind: 'journal'; title: string; stats: string; commissions: { name: string; text: string; value: number; target: number; done: boolean }[]; relics: CollItem[]; upgrades: CollItem[]; synergies: CollItem[]; route: RouteItem[]; encounter?: EncounterModel | null; practice?: boolean }
+  | { kind: 'journal'; title: string; stats: string; commissions: { name: string; text: string; value: number; target: number; done: boolean }[]; relics: CollItem[]; upgrades: CollItem[]; synergies: CollItem[]; route: RouteItem[]; encounter?: EncounterModel | null; practice?: boolean; canSave?: boolean }
 
 export interface ViewModel {
   sig: string
@@ -237,6 +237,7 @@ function pips(on: number, max: number, cls = ''): string {
 }
 
 const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+const coarse = () => typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches
 
 function bump(el: Element | null, scale = 1.25): void {
   if (!el || reduced || !(el as HTMLElement).animate) return
@@ -349,15 +350,21 @@ export class UI {
     }
     if (view.sig !== this.sig) {
       const prevKind = this.stage.dataset.kind
-      const refreshLab = prevKind === 'laboratory' && view.stage.kind === 'laboratory'
-      const labScroll = refreshLab ? this.stage.querySelector<HTMLElement>('.laboratory')?.scrollTop ?? 0 : 0
-      const focusedAction = refreshLab && document.activeElement instanceof HTMLElement && this.stage.contains(document.activeElement)
+      const heading = () => this.stage.querySelector('h1, h2')?.textContent ?? ''
+      // An in-place refresh (a purchase, a selector, a toggle) keeps the reader's place, open panels and focus.
+      const refresh = prevKind === view.stage.kind && prevKind !== 'none'
+      const prevHeading = refresh ? heading() : ''
+      const scrolled = refresh ? Array.from(this.stage.querySelectorAll<HTMLElement>('*')).flatMap((el, i) => el.scrollTop > 0 ? [[i, el.scrollTop] as const] : []) : []
+      const opened = refresh ? Array.from(this.stage.querySelectorAll('details'), d => d.open) : []
+      const focusedAction = refresh && document.activeElement instanceof HTMLElement && this.stage.contains(document.activeElement)
         ? document.activeElement.dataset.act : undefined
       this.sig = view.sig
       this.stage.innerHTML = stageHtml(view.stage)
-      if (refreshLab) {
-        const lab = this.stage.querySelector<HTMLElement>('.laboratory')
-        if (lab) lab.scrollTop = labScroll
+      if (refresh && heading() === prevHeading) {
+        const all = this.stage.querySelectorAll<HTMLElement>('*')
+        for (const [i, top] of scrolled) if (all[i]) all[i].scrollTop = top
+        const details = this.stage.querySelectorAll('details')
+        if (details.length === opened.length) details.forEach((d, i) => { d.open = opened[i] })
         if (focusedAction) Array.from(this.stage.querySelectorAll<HTMLElement>('[data-act]')).find(el => el.dataset.act === focusedAction)?.focus({ preventScroll: true })
       }
       if (['choices', 'fork', 'shop', 'event', 'bargain', 'repair', 'victory'].includes(view.stage.kind)) this.stage.insertAdjacentHTML('beforeend', `<button class="round-btn decision-journal" data-act="journal" aria-label="Build and route">${ico('map')}<kbd>J</kbd></button>`)
@@ -561,8 +568,8 @@ export class UI {
         const action = hud.coach.action
         const mobileTitle = action === 'launch' ? 'Release' : action === 'nudge' ? 'Nudge' : action === 'overdrive' ? 'Overdrive' : hud.coach.title
         const mobileText = action === 'launch' ? 'Aim for your first peg. Tap Release sphere.'
-          : action === 'nudge' ? 'A / D or Nudge pushes toward a useful lane.'
-            : action === 'overdrive' ? hud.overdriveReady ? 'E / Overdrive lifts the sphere: 2× payouts for 3s.' : 'Hit five different pegs to charge Overdrive.'
+          : action === 'nudge' ? `${coarse() ? '' : 'A / D or '}Nudge pushes toward a useful lane.`
+            : action === 'overdrive' ? hud.overdriveReady ? `${coarse() ? '' : 'E / '}Overdrive lifts the sphere: 2× payouts for 3s.` : 'Hit five different pegs to charge Overdrive.'
               : hud.coach.text
         set(`${variant}-coach-title`, mobile ? mobileTitle : hud.coach.title)
         set(`${variant}-coach-text`, mobile ? mobileText : hud.coach.text)
@@ -934,7 +941,7 @@ function stageHtml(stage: StageModel): string {
           <button class="btn btn-go big" data-act="resume">${ico('play')}<span>Resume</span></button>
           <button class="btn" data-act="journal">${ico('map')}<span>${stage.practice ? 'Practice journal' : 'Build & route'} <kbd>J</kbd></span></button>
           <button class="btn" data-act="settings">${ico('gear')}<span>Settings</span></button>
-          ${stage.practice ? `<button class="btn" data-act="lab-retry">${ico('refresh')}<span>Restart machine</span></button><button class="btn" data-act="lab-configure">${ico('flask')}<span>Configure</span></button><button class="btn btn-danger" data-act="lab-exit">${ico('close')}<span>Leave practice</span></button>` : `<button class="btn btn-danger" data-act="abandon">${ico('close')}<span>Abandon run</span></button>`}
+          ${stage.practice ? `<button class="btn" data-act="lab-retry">${ico('refresh')}<span>Restart machine</span></button><button class="btn" data-act="lab-configure">${ico('flask')}<span>Configure</span></button><button class="btn btn-danger" data-act="lab-exit">${ico('close')}<span>Leave practice</span></button>` : `${stage.canSave ? `<button class="btn" data-act="save-exit">${ico('back')}<span>Save &amp; go home</span></button>` : ''}<button class="btn btn-danger" data-act="abandon">${ico('close')}<span>Abandon run</span></button>`}
         </div></div>`
     case 'runend': {
       const s = stage.summary
@@ -970,7 +977,7 @@ function stageHtml(stage: StageModel): string {
 function journalHtml(stage: Extract<StageModel, { kind: 'journal' }>): string {
   const commissions = stage.practice ? '<p class="fine">Practice · this fall earns no expedition rewards or progression.</p>' : `<h3 class="section-h">Commissions</h3><div class="commissions">${stage.commissions.map(c => `<div class="commission panel ${c.done ? 'complete' : ''}"><span class="quest-check" aria-hidden="true">${c.done ? '✓' : ''}</span><div><b>${esc(c.name)}</b><p>${esc(c.text)}</p><span class="bar"><i style="width:${(Math.min(1, c.value / Math.max(1, c.target)) * 100).toFixed(1)}%"></i></span><small>${Math.min(c.target, c.value)}/${c.target}${c.done ? ' · Paid' : ''}</small></div></div>`).join('')}</div>`
   const route = stage.practice ? '' : `<div class="route-heading"><h3 class="section-h">Route</h3><small class="route-legend"><i class="l-current"></i>Here <i class="l-visited"></i>Visited <i class="l-future"></i>Ahead</small></div><div class="route-map">${[1, 2, 3].map(act => routeAct(stage.route, act)).join('')}</div>`
-  return `<article class="screen journal"><header class="screen-head"><button class="round-btn back" data-act="close-journal" aria-label="Close journal">${ico('close')}</button><div class="screen-title"><small>${esc(stage.stats)}</small><h2>${esc(stage.title)}</h2></div><span class="head-spacer"></span></header><div class="screen-body">${stage.encounter ? encounterBriefing(stage.encounter, stage.practice) : ''}${commissions}${block('Relics', stage.relics)}${block('Upgrades', stage.upgrades)}${stage.synergies.length ? block('Resonances', stage.synergies) : ''}${route}<button class="btn btn-go big" data-act="close-journal">${ico('play')}<span>Back to ${stage.practice ? 'practice' : 'the run'}</span></button></div></article>`
+  return `<article class="screen journal"><header class="screen-head"><button class="round-btn back" data-act="close-journal" aria-label="Close journal">${ico('close')}</button><div class="screen-title"><small>${esc(stage.stats)}</small><h2>${esc(stage.title)}</h2></div><span class="head-spacer"></span></header><div class="screen-body">${stage.encounter ? encounterBriefing(stage.encounter, stage.practice) : ''}${commissions}${block('Relics', stage.relics)}${block('Upgrades', stage.upgrades)}${stage.synergies.length ? block('Resonances', stage.synergies) : ''}${route}<button class="btn btn-go big" data-act="close-journal">${ico('play')}<span>Back to ${stage.practice ? 'practice' : 'the run'}</span></button>${stage.canSave ? `<button class="btn" data-act="save-exit">${ico('back')}<span>Save &amp; go home</span></button>` : ''}</div></article>`
 }
 
 function routeAct(all: RouteItem[], act: number): string {
@@ -1038,12 +1045,12 @@ function hubHtml(stage: Extract<StageModel, { kind: 'hub' }>): string {
     <section class="home-play">
       <div class="trial-select"><button class="round-btn small" data-act="trial-down" aria-label="Lower trial" ${stage.trial <= 0 ? 'disabled' : ''}>${ico('back')}</button><div class="trial-copy-wrap"><b>Trial ${stage.trial}<small>/${stage.maxTrial}</small></b><span class="trial-copy">${esc(stage.trialText)}</span></div><button class="round-btn small" data-act="trial-up" aria-label="Raise trial" ${stage.trial >= stage.maxTrial ? 'disabled' : ''}>${ico('next')}</button></div>
       ${stage.legacy ? '<p class="legacy-route">Classic route · relay guardians disabled</p>' : ''}
-      ${stage.resume ? `<button class="btn btn-go play-btn" data-act="continue-run">${ico('play')}<span><b>Continue</b><small>Your run is waiting</small></span><kbd>Enter</kbd></button><button class="btn play-alt" data-act="start">${ico('refresh')}<span>New run</span></button>` : `<button class="btn btn-go play-btn" data-act="start">${ico('play')}<span><b>${stage.shared ? 'Play challenge' : 'Play'}</b><small>${stage.shared ? 'Shared seed and sphere' : meta && meta.chartOn && meta.chartLevels > 0 ? 'Star Chart active' : 'Pick a relic and drop'}</small></span><kbd>Enter</kbd></button>`}
+      ${stage.resume ? `<button class="btn btn-go play-btn" data-act="continue-run">${ico('play')}<span><b>Continue</b><small>Your run is waiting</small></span><kbd>Enter</kbd></button><button class="btn play-alt ${stage.confirm === 'start' ? 'btn-danger' : ''}" data-act="start">${ico('refresh')}<span>${stage.confirm === 'start' ? 'Tap again · replace run' : 'New run'}</span></button>` : `<button class="btn btn-go play-btn" data-act="start">${ico('play')}<span><b>${stage.shared ? 'Play challenge' : 'Play'}</b><small>${stage.shared ? 'Shared seed and sphere' : meta && meta.chartOn && meta.chartLevels > 0 ? 'Star Chart active' : 'Pick a relic and drop'}</small></span><kbd>Enter</kbd></button>`}
     </section>
     <section class="home-tiles">
-      <button class="tile t-gold" data-act="daily">${ico('calendar')}<b>Daily</b><small>${stage.dailyBest ? `Best ${compact(stage.dailyBest)}` : esc(stage.dailySphere)}</small></button>
+      <button class="tile t-gold" data-act="daily">${ico('calendar')}<b>Daily</b><small>${stage.confirm === 'daily' ? 'Tap again · replace run' : stage.dailyBest ? `Best ${compact(stage.dailyBest)}` : esc(stage.dailySphere)}</small></button>
       <button class="tile t-cyan" data-act="quests">${ico('check')}<b>Quests</b><small>${meta ? `${meta.questsDone}/${meta.questsTotal}` : 'Goals'}</small>${meta && meta.questsDone < meta.questsTotal ? `<em class="badge-dot">${meta.questsTotal - meta.questsDone}</em>` : ''}</button>
-      <button class="tile t-violet" data-act="stars">${ico('star')}<b>Star Chart</b><small>${meta ? `${meta.chartLevels} upgrades` : 'Upgrades'}</small></button>
+      <button class="tile t-violet" data-act="stars">${ico('star')}<b>Star Chart</b><small>${meta ? `${meta.chartLevels} upgrade${meta.chartLevels === 1 ? '' : 's'}` : 'Upgrades'}</small></button>
       <button class="tile t-orange" data-act="laboratory">${ico('flask')}<b>Practice</b><small>Any machine</small></button>
     </section>
     <details class="home-options" ${stage.seed || stage.canStudy ? 'open' : ''}><summary>${ico('shard')}<span>Research & seed</span>${stage.canStudy ? '<em class="badge-dot">!</em>' : ''}</summary>

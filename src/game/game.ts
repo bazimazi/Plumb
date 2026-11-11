@@ -24,6 +24,13 @@ import { Haptics, type HapticCue } from '../haptics'
 import { DAILY_QUEST_REWARD, FEATS, FINISHES, NO_BONUS, STAR_NODES, WEEKLY_QUEST_REWARD, addXp, advanceQuests, toRoman, chartBonuses, dayKey, depthBounty, featProgress, featReward, finishFor, masteryXp, questDefs, rankReward, rankTitle, rankXp, starCost, starNode, stardustFor, weekKey, xpFor, type ChartBonuses, type QuestDef, type QuestStat } from '../meta/progression'
 import { UI, type ChoiceCard, type ProgressModel, type HudModel, type StageModel, type SummaryModel, type ViewModel } from '../ui/ui'
 
+/** Screens whose state is fully captured by an expedition checkpoint. */
+const REPLACE_PROMPT = 'Replace your saved run?'
+/** CSS pixels the floating control bar covers at the bottom of wide layouts. */
+const CONTROL_INSET = 100
+/** The practice toolbar sits above the controls on wide layouts. */
+const PRACTICE_TOOLBAR = 42
+const CHECKPOINT_SCREENS = ['aim', 'fork', 'shop', 'choices', 'repair', 'bargain', 'event', 'victory']
 const EMPTY: Cmd = { nudge: 0, flip: false, special: false, tilt: false, aimX: 0 }
 
 const toRomanTier = (n: number) => toRoman(n)
@@ -171,6 +178,8 @@ export class Game {
   private readonly sfx: Sfx
   private readonly debugEl: HTMLElement
   private readonly motionQuery = matchMedia('(prefers-reduced-motion: reduce)')
+  /** Touch screens get copy about buttons and drags instead of keyboard keys. */
+  private readonly touchQuery = matchMedia('(hover: none) and (pointer: coarse)')
   private readonly haptics = new Haptics()
   /** Adaptive resolution ceiling; lowered when frames run long. */
   private dprCap = 2
@@ -181,6 +190,10 @@ export class Game {
   private menuSkip = false
   /** Rewards earned mid-run, announced at a calm moment. */
   private questNews: string[] = []
+  /** Rank before quest XP was granted mid-run, so the debrief can still show the level-up. */
+  /** A new run that would overwrite the saved expedition waits for a second, confirming tap. */
+  private replaceArmed = ''
+  private questRank: { level: number; xp: number; dust: number } | null = null
 
   constructor() {
     this.dev = import.meta.env?.DEV ?? false
@@ -317,6 +330,7 @@ export class Game {
         this.pausedFrom = this.screen
         this.screen = 'pause'
       } else if (this.screen === 'journal') this.screen = this.journalReturn
+      else if (this.screen === 'reveal') this.onAction('close-reveal')
       else if (this.screen === 'laboratory' || this.screen === 'practice-result') this.onAction('lab-exit')
       else if (['help', 'collection', 'settings', 'history', 'stars', 'quests'].includes(this.screen)) this.onAction('back')
       return
@@ -352,6 +366,7 @@ export class Game {
       else if (this.screen === 'practice-result') this.onAction('lab-retry')
       else if (this.screen === 'laboratory') this.onAction('lab-start')
       else if (this.screen === 'pause') this.screen = this.pausedFrom
+      else if (this.screen === 'reveal') this.onAction('close-reveal')
     }
   }
 
@@ -593,8 +608,10 @@ export class Game {
     // Frame the launcher at the top so the barrel and the aim line read together.
     if (!this.attract() && this.screen === 'aim') y = Math.min((board.shutterY ?? board.h * 0.36) - 40, board.launchY - 70 + half)
     else if (drop?.launched) y = drop.ball.y + clamp(drop.ball.vy * 0.1, -30, 200)
-    const max = board.h - half
-    if (max <= half) return board.h / 2
+    // Wide layouts float the controls over the canvas; keep the collectors and landing above them.
+    const inset = !this.attract() && this.cssW > 760 ? (CONTROL_INSET + (this.practice ? PRACTICE_TOOLBAR : 0)) / scale : 0
+    const max = board.h - half + inset
+    if (max <= half) return (board.h + inset) / 2
     return clamp(y, half, max)
   }
 
@@ -704,6 +721,7 @@ export class Game {
     this.practice = null
     this.lastMachine = null
     this.questNews = []
+    this.questRank = null
     const clean = cleanSeed(seed) || makeSeed()
     const ball = BALLS[ballId] ? ballId : 'rubber'
     const route = createRoute(rngFor(clean, 'route:0'), { ascension, rules })
@@ -1115,7 +1133,7 @@ export class Game {
       line: win
         ? this.drop?.dead ? 'The core broke. The shell did not survive the landing.' : 'The Helix is quieter for a moment.'
         : run.integrity > 0
-          ? 'The sphere left the machine. The shell is still whole.'
+          ? `The sphere left the machine. The shell is still ${run.integrity >= run.integrityMax ? 'whole' : 'holding'}.`
           : 'The shell gives out. The machine keeps the rest.',
       score: run.score,
       best: run.score > beforeBest && run.score > 0,
@@ -1237,7 +1255,8 @@ export class Game {
     for (const { q, weekly } of finished) {
       const reward = weekly ? WEEKLY_QUEST_REWARD : DAILY_QUEST_REWARD
       this.save.stardust += reward.dust
-      this.grantRankXp(reward.xp)
+      this.questRank ??= { level: this.save.level, xp: this.save.xp, dust: 0 }
+      this.questRank.dust += this.grantRankXp(reward.xp).reduce((sum, level) => sum + rankReward(level), 0)
       this.questNews.push(`${weekly ? 'Weekly' : 'Daily'} quest · ${q.text} · +${reward.dust} stardust`)
     }
     if (finished.length) {
@@ -1285,9 +1304,11 @@ export class Game {
     const outcome = { score: run.score, machines: run.drops, win, clears: run.clears, pure: !!run.pure, trial: run.ascension }
     const dust = stardustFor(outcome, chart.resonance)
     const xp = xpFor(outcome, chart.insight)
-    const before = { level: this.save.level, xp: this.save.xp }
+    // Quests pay the moment they complete, so a level gained mid-run still belongs to this debrief.
+    const before = this.questRank ?? { level: this.save.level, xp: this.save.xp, dust: 0 }
+    this.questRank = null
     const levels = this.grantRankXp(xp)
-    const levelDust = levels.reduce((sum, level) => sum + rankReward(level), 0)
+    const levelDust = before.dust + levels.reduce((sum, level) => sum + rankReward(level), 0)
     this.save.stardust += dust
     // Sphere mastery uses the same XP. Finishes unlock at fixed mastery levels.
     const sphere = this.save.sphereLevels[run.ballId] ?? { level: 1, xp: 0 }
@@ -1445,7 +1466,7 @@ export class Game {
 
   /** Save at decision boundaries. A reload during a drop restarts that machine. */
   private checkpoint(): void {
-    if (this.practice || !this.run || !['aim', 'fork', 'shop', 'choices', 'repair', 'bargain', 'event', 'victory'].includes(this.screen)) return
+    if (this.practice || !this.run || !CHECKPOINT_SCREENS.includes(this.screen)) return
     const { nodes: _nodes, profile: _profile, ...run } = this.run
     const data = { version: 2, run, screen: this.screen, offers: this.offers, rerolls: this.rerolls, drafting: this.drafting, draftTitle: this.draftTitle }
     writeCheckpoint(data)
@@ -1455,9 +1476,12 @@ export class Game {
 
   private resumeExpedition(): void {
     this.practice = null
+    // Hub notices (a save confirmation, a replace prompt) do not belong over the resumed machine.
+    this.toast = null
+    this.toastT = 0
     const data = this.suspended as { version: number; run: Omit<Run, 'nodes' | 'profile'>; screen: string; offers: Offer[]; rerolls: number; drafting: boolean; draftTitle: string } | null
     try {
-      if (!data || data.version !== 2 || !data.run || !['aim', 'fork', 'shop', 'choices', 'repair', 'bargain', 'event', 'victory'].includes(data.screen)) throw new Error('checkpoint')
+      if (!data || data.version !== 2 || !data.run || !CHECKPOINT_SCREENS.includes(data.screen)) throw new Error('checkpoint')
       const r = data.run
       if (r.rules !== undefined && r.rules !== 2 && r.rules !== 3) throw new Error('rules')
       const rules: RulesVersion = r.rules ?? 2
@@ -1603,7 +1627,7 @@ export class Game {
       this.say('Final pass', 'Progress kept · your next landing settles the fall', 2, false)
       this.sfx.recirculate()
     } else if (e.type === 'overdrive-ready') {
-      if (this.cssW > 760) this.say('Overdrive ready', 'Press E · choose the moment', 1.6, false)
+      if (this.cssW > 760) this.say('Overdrive ready', this.touchQuery.matches ? 'Tap Overdrive · choose the moment' : 'Press E · choose the moment', 1.6, false)
       this.sfx.overdrive(true)
     } else if (e.type === 'overdrive-start') {
       this.say('Overdrive', '2× collision payouts · combo held', 1.2, true)
@@ -1756,7 +1780,8 @@ export class Game {
   private buildLine(): string {
     const run = this.run
     if (!run) return ''
-    const bits = [ballById(run.ballId).name, `${run.relics.length} relics`, `${run.upgrades.length} upgrades`]
+    const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+    const bits = [ballById(run.ballId).name, count(run.relics.length, 'relic'), count(run.upgrades.length, 'upgrade')]
     if (run.profile.synergies[0]) bits.push(run.profile.synergies[0].name)
     return bits.join('   ·   ')
   }
@@ -1781,10 +1806,11 @@ export class Game {
     if (!run || !drop || !node) return ''
     if (this.practice) return node.blurb
     if (this.save.runs === 0 && node.id === 'workshop') {
-      if (this.screen === 'aim') return 'Point, then click. You are choosing a beginning, not a destiny.'
-      if (this.screen === 'drop' && drop.overdriveReady) return 'Reactor charged. E lifts the sphere and doubles collision payouts for three seconds.'
-      if (this.screen === 'drop' && drop.nudges === drop.maxNudges) return 'A and D nudge. Spend them when the gate is close.'
-      if (this.screen === 'drop' && drop.flips > 0 && node.layout) return `F flips the gate. Gold is on the ${drop.board.goldSide}.`
+      const touch = this.touchQuery.matches
+      if (this.screen === 'aim') return touch ? 'Drag to aim, then tap Release. You are choosing a beginning, not a destiny.' : 'Point, then click. You are choosing a beginning, not a destiny.'
+      if (this.screen === 'drop' && drop.overdriveReady) return `Reactor charged. ${touch ? 'Overdrive' : 'E'} lifts the sphere and doubles collision payouts for three seconds.`
+      if (this.screen === 'drop' && drop.nudges === drop.maxNudges) return touch ? 'The Nudge buttons push the sphere. Spend them when the gate is close.' : 'A and D nudge. Spend them when the gate is close.'
+      if (this.screen === 'drop' && drop.flips > 0 && node.layout) return `${touch ? 'Gate' : 'F'} flips the gate. Gold is on the ${drop.board.goldSide}.`
     }
     return node.blurb
   }
@@ -1810,10 +1836,11 @@ export class Game {
   private coachModel(): HudModel['coach'] {
     const drop = this.drop
     if (this.practice || !drop || !this.run || this.run.nodeId !== 'workshop' || this.run.loop > 0 || this.save.coachingComplete || !['aim', 'drop'].includes(this.screen)) return null
-    if (this.screen === 'aim') return { step: 1, title: 'Choose your first contact', text: 'Aim with the pointer or arrows. The dotted line shows the opening. Release when you like the first contact.', action: 'launch' }
-    if (!drop.overdriveReady && !this.workshopNudged) return { step: 2, title: 'You can change the line', text: 'A / D or the Nudge buttons give a short push. Try one as the sphere approaches a useful lane.', action: 'nudge' }
-    if (drop.overdriveUses === 0) return { step: 3, title: drop.overdriveReady ? 'Make your moment' : 'Charge the reactor', text: drop.overdriveReady ? 'Press E or Overdrive: lift the sphere and double collision payouts for three seconds. Two uses per machine.' : 'Five different physical peg contacts charge Overdrive. Repeated hits and relic lightning do not add charge.', action: 'overdrive' }
-    return { step: 2, title: 'Try steering the fall', text: 'You used the reactor. Try A / D or a Nudge button to move toward the next useful lane.', action: 'nudge' }
+    const touch = this.touchQuery.matches
+    if (this.screen === 'aim') return { step: 1, title: 'Choose your first contact', text: touch ? 'Drag on the machine to aim. The dotted line shows the opening. Tap Release when you like the first contact.' : 'Aim with the pointer or arrows. The dotted line shows the opening. Release when you like the first contact.', action: 'launch' }
+    if (!drop.overdriveReady && !this.workshopNudged) return { step: 2, title: 'You can change the line', text: `${touch ? 'The' : 'A / D or the'} Nudge buttons give a short push. Try one as the sphere approaches a useful lane.`, action: 'nudge' }
+    if (drop.overdriveUses === 0) return { step: 3, title: drop.overdriveReady ? 'Make your moment' : 'Charge the reactor', text: drop.overdriveReady ? `${touch ? 'Tap' : 'Press E or'} Overdrive: lift the sphere and double collision payouts for three seconds. Two uses per machine.` : 'Five different physical peg contacts charge Overdrive. Repeated hits and relic lightning do not add charge.', action: 'overdrive' }
+    return { step: 2, title: 'Try steering the fall', text: `You used the reactor. Try ${touch ? 'a' : 'A / D or a'} Nudge button to move toward the next useful lane.`, action: 'nudge' }
   }
 
   private view(): ViewModel {
@@ -1950,6 +1977,7 @@ export class Game {
           canStudy: this.canStudy(),
           tick: this.hubTick,
           resume: !!this.suspended,
+          confirm: this.replaceArmed,
           trial: this.draftAscension,
           maxTrial: Math.max(this.draftAscension, this.save.mastery[this.sharedBall || this.save.ball] ?? 0),
           trialText: ASCENSIONS[this.draftAscension],
@@ -2036,7 +2064,7 @@ export class Game {
         return { kind: 'resolve', title: this.resolveCopy.title, sub: this.resolveCopy.sub, earned: d?.earned ?? 0, tone }
       }
       case 'pause':
-        return { kind: 'pause', practice: !!this.practice }
+        return { kind: 'pause', practice: !!this.practice, canSave: !!this.run && !this.practice }
       case 'event':
         return run ? { kind: 'event', ...this.eventModel() } : { kind: 'none' }
       case 'victory':
@@ -2165,6 +2193,7 @@ export class Game {
     const current = run.nodes[run.nodeId]
     return {
       kind: 'journal', title: ballById(run.ballId).name,
+      canSave: !this.practice && (this.leaveFrom() === 'drop' || CHECKPOINT_SCREENS.includes(this.leaveFrom())),
       practice: !!this.practice,
       stats: `${this.practice ? 'Practice · ' : ''}${run.rules === 2 ? 'Classic route · ' : ''}Circuit ${run.loop + 1} · Trial ${run.ascension} · ${run.integrity}/${run.integrityMax} shell · ${run.gears} gears · Seed ${run.seed}`,
       encounter: this.encounterModel(),
@@ -2200,6 +2229,19 @@ export class Game {
   private researchCost(): number { return TUNING.researchCost + this.save.researched.length * 8 }
 
   private onAction(act: string): void {
+    const replacing = (act === 'start' || act === 'daily' || act.startsWith('replay:')) && !!this.suspended && (this.screen === 'hub' || this.screen === 'history')
+    if (replacing && this.replaceArmed !== act) {
+      this.replaceArmed = act
+      this.selectedPulse++
+      this.sfx.ui()
+      this.say(REPLACE_PROMPT, 'Tap again to start over. The saved expedition will be lost.', 2.5, false)
+      return
+    }
+    if (this.replaceArmed) {
+      this.replaceArmed = ''
+      this.selectedPulse++
+      if (this.toast?.title === REPLACE_PROMPT) { this.toast = null; this.toastT = 0 }
+    }
     if (act === 'laboratory' && this.screen === 'hub') { this.openLaboratory(); return }
     if (act === 'practice-last' && this.screen === 'runend' && this.summary?.debrief && this.lastMachine) { this.openLaboratory(true); return }
     if (act === 'lab-exit' && this.practice) { this.toHub(); return }
@@ -2352,6 +2394,19 @@ export class Game {
       this.screen = this.pausedFrom === 'drop' ? 'drop' : 'aim'
       return
     }
+    if (act === 'save-exit') {
+      // Leaves for the hub with the expedition checkpoint intact. A fall in progress restarts from its launch, as after a reload.
+      if (!this.run || this.practice) return
+      const from = this.leaveFrom()
+      if (from !== 'drop' && !CHECKPOINT_SCREENS.includes(from)) return
+      if (from !== 'drop') { this.screen = from; this.checkpoint() }
+      const saved = readCheckpoint() ?? this.suspended
+      if (!saved) return
+      this.suspended = saved
+      this.toHub()
+      this.say('Expedition saved', from === 'drop' ? 'Continue restarts this machine from its launch.' : 'Continue from the hub whenever you are ready.', 2, false)
+      return
+    }
     if (act === 'abandon') {
       if (this.practice) { this.configureLaboratory(); return }
       if (this.run && !this.run.launchedOnce) { clearCheckpoint(); this.suspended = null; this.toHub() }
@@ -2465,6 +2520,12 @@ export class Game {
     }
     if (act === 'overdrive' && this.screen === 'drop') this.pending.overdrive = true
     if (act === 'skip-node' && this.dev) this.advance()
+  }
+
+  /** The run screen underneath any pause or journal overlay. */
+  private leaveFrom(): string {
+    const under = this.screen === 'journal' ? this.journalReturn : this.screen
+    return under === 'pause' ? this.pausedFrom : under
   }
 
   private copyText(value: string, title: string): void {
