@@ -1,4 +1,5 @@
 import { hashString, mulberry32 } from '../core/rng'
+import { t } from '../i18n'
 
 /**
  * Long-term progression. Everything here is pure: the controller feeds in run
@@ -43,8 +44,8 @@ const TITLES = [
 /** A title every five ranks; past the list it keeps counting. */
 export function rankTitle(level: number): string {
   const index = Math.floor((Math.max(1, level) - 1) / 5)
-  if (index < TITLES.length) return TITLES[index]
-  return `Star Warden ${toRoman(index - TITLES.length + 1)}`
+  if (index < TITLES.length) return t(TITLES[index])
+  return t('Star Warden {n}', { n: toRoman(index - TITLES.length + 1) })
 }
 
 export function rankReward(level: number): number {
@@ -128,19 +129,19 @@ export function asymptote(level: number, cap: number, half: number): number {
 }
 
 export const STAR_NODES: StarNode[] = [
-  { id: 'startGears', name: 'Provisions', glyph: '⚙', max: 5, base: 20, growth: 1.5, text: l => `Begin each expedition with ${l * 8} gears.` },
-  { id: 'combo', name: 'Long Fuse', glyph: '∿', max: 5, base: 30, growth: 1.55, text: l => `Combo window +${(l * 0.03).toFixed(2)}s.` },
-  { id: 'shards', name: 'Shard Lens', glyph: '◆', max: 5, base: 45, growth: 1.6, text: l => `+${l * 10}% shards from every expedition.` },
-  { id: 'discount', name: "Merchant's Favor", glyph: '%', max: 5, base: 40, growth: 1.6, text: l => `Shop prices −${l * 4}%.` },
-  { id: 'rerolls', name: 'Loaded Dice', glyph: '↻', max: 2, base: 70, growth: 2.4, text: l => `${l} free shop reroll${l === 1 ? '' : 's'} per shop.` },
-  { id: 'repair', name: 'Field Kit', glyph: '+', max: 2, base: 90, growth: 2, text: l => `Shop shell repair costs −${l * 20}%.` },
-  { id: 'nudge', name: 'Spare Jet', glyph: '⇆', max: 1, base: 320, growth: 1, text: l => l ? '+1 nudge in every machine.' : '+1 nudge in every machine.' },
-  { id: 'draft', name: 'Wide Draft', glyph: '❖', max: 1, base: 360, growth: 1, text: () => 'Starting relic drafts offer a fourth schematic.' },
-  { id: 'shell', name: 'Tempered Shell', glyph: '◯', max: 1, base: 420, growth: 1, text: () => '+1 maximum shell.' },
-  { id: 'reactor', name: 'Reactor Tuning', glyph: 'ϟ', max: 1, base: 520, growth: 1, text: () => 'Overdrive charges from 4 different pegs instead of 5.' },
-  { id: 'yield', name: 'Stellar Yield', glyph: '✦', max: Infinity, base: 25, growth: 1.13, text: l => `Board payouts +${pct(asymptote(l, 0.3, 15))}. Endless; approaches +30%.` },
-  { id: 'insight', name: 'Starlight', glyph: '☀', max: Infinity, base: 25, growth: 1.13, text: l => `Rank and mastery XP +${pct(asymptote(l, 0.5, 20))}. Endless; approaches +50%.` },
-  { id: 'resonance', name: 'Dust Resonance', glyph: '✧', max: Infinity, base: 40, growth: 1.15, text: l => `Stardust income +${pct(asymptote(l, 0.5, 20))}. Endless; approaches +50%.` },
+  { id: 'startGears', name: 'Provisions', glyph: '⚙', max: 5, base: 20, growth: 1.5, text: l => t('Begin each expedition with {n} gears.', { n: l * 8 }) },
+  { id: 'combo', name: 'Long Fuse', glyph: '∿', max: 5, base: 30, growth: 1.55, text: l => t('Combo window +{n}s.', { n: (l * 0.03).toFixed(2) }) },
+  { id: 'shards', name: 'Shard Lens', glyph: '◆', max: 5, base: 45, growth: 1.6, text: l => t('+{n}% shards from every expedition.', { n: l * 10 }) },
+  { id: 'discount', name: "Merchant's Favor", glyph: '%', max: 5, base: 40, growth: 1.6, text: l => t('Shop prices −{n}%.', { n: l * 4 }) },
+  { id: 'rerolls', name: 'Loaded Dice', glyph: '↻', max: 2, base: 70, growth: 2.4, text: l => t(l === 1 ? '{n} free shop reroll per shop.' : '{n} free shop rerolls per shop.', { n: l }) },
+  { id: 'repair', name: 'Field Kit', glyph: '+', max: 2, base: 90, growth: 2, text: l => t('Shop shell repair costs −{n}%.', { n: l * 20 }) },
+  { id: 'nudge', name: 'Spare Jet', glyph: '⇆', max: 1, base: 320, growth: 1, text: () => t('+1 nudge in every machine.') },
+  { id: 'draft', name: 'Wide Draft', glyph: '❖', max: 1, base: 360, growth: 1, text: () => t('Starting relic drafts offer a fourth schematic.') },
+  { id: 'shell', name: 'Tempered Shell', glyph: '◯', max: 1, base: 420, growth: 1, text: () => t('+1 maximum shell.') },
+  { id: 'reactor', name: 'Reactor Tuning', glyph: 'ϟ', max: 1, base: 520, growth: 1, text: () => t('Overdrive charges from 4 different pegs instead of 5.') },
+  { id: 'yield', name: 'Stellar Yield', glyph: '✦', max: Infinity, base: 25, growth: 1.13, text: l => t('Board payouts +{pct}. Endless; approaches +30%.', { pct: pct(asymptote(l, 0.3, 15)) }) },
+  { id: 'insight', name: 'Starlight', glyph: '☀', max: Infinity, base: 25, growth: 1.13, text: l => t('Rank and mastery XP +{pct}. Endless; approaches +50%.', { pct: pct(asymptote(l, 0.5, 20)) }) },
+  { id: 'resonance', name: 'Dust Resonance', glyph: '✧', max: Infinity, base: 40, growth: 1.15, text: l => t('Stardust income +{pct}. Endless; approaches +50%.', { pct: pct(asymptote(l, 0.5, 20)) }) },
 ]
 
 export function starNode(id: string): StarNode | undefined {
@@ -313,17 +314,17 @@ const geometric = (base: number, ratio: number) => (tier: number) => {
 }
 
 export const FEATS: FeatDef[] = [
-  { id: 'pegs', name: 'Peg Striker', text: t => `Strike ${t.toLocaleString('en-US')} pegs`, target: geometric(250, 3) },
-  { id: 'golds', name: 'Gold Hunter', text: t => `Strike ${t.toLocaleString('en-US')} gold pegs`, target: geometric(30, 3) },
-  { id: 'machines', name: 'Survivor', text: t => `Survive ${t.toLocaleString('en-US')} machines`, target: geometric(10, 2.5) },
-  { id: 'runs', name: 'Pilgrim', text: t => `Finish ${t.toLocaleString('en-US')} expeditions`, target: geometric(3, 2.2) },
-  { id: 'wins', name: 'Grinder Breaker', text: t => `Break the Grinder ${t.toLocaleString('en-US')} times`, target: geometric(1, 2.5) },
-  { id: 'jackpots', name: 'Maw Feeder', text: t => `Land ${t.toLocaleString('en-US')} jackpots`, target: geometric(1, 2.5) },
-  { id: 'overdrives', name: 'Reactor Pilot', text: t => `Trigger Overdrive ${t.toLocaleString('en-US')} times`, target: geometric(10, 2.5) },
-  { id: 'guardians', name: 'Guardian Friend', text: t => `Link ${t.toLocaleString('en-US')} guardians`, target: geometric(1, 2.5) },
-  { id: 'combo', name: 'Chain Singer', text: t => `Reach a ${t}-hit combo`, target: tier => 10 + tier * 5 },
-  { id: 'score', name: 'Fortune', text: t => `Score ${t.toLocaleString('en-US')} in one expedition`, target: geometric(1500, 2.2) },
-  { id: 'depth', name: 'Deep Diver', text: t => `Clear ${t} circuit${t === 1 ? '' : 's'} in one expedition`, target: tier => tier + 1 },
+  { id: 'pegs', name: 'Peg Striker', text: n => t('Strike {n} pegs', { n: n.toLocaleString('en-US') }), target: geometric(250, 3) },
+  { id: 'golds', name: 'Gold Hunter', text: n => t('Strike {n} gold pegs', { n: n.toLocaleString('en-US') }), target: geometric(30, 3) },
+  { id: 'machines', name: 'Survivor', text: n => t('Survive {n} machines', { n: n.toLocaleString('en-US') }), target: geometric(10, 2.5) },
+  { id: 'runs', name: 'Pilgrim', text: n => t('Finish {n} expeditions', { n: n.toLocaleString('en-US') }), target: geometric(3, 2.2) },
+  { id: 'wins', name: 'Grinder Breaker', text: n => t('Break the Grinder {n} times', { n: n.toLocaleString('en-US') }), target: geometric(1, 2.5) },
+  { id: 'jackpots', name: 'Maw Feeder', text: n => t('Land {n} jackpots', { n: n.toLocaleString('en-US') }), target: geometric(1, 2.5) },
+  { id: 'overdrives', name: 'Reactor Pilot', text: n => t('Trigger Overdrive {n} times', { n: n.toLocaleString('en-US') }), target: geometric(10, 2.5) },
+  { id: 'guardians', name: 'Guardian Friend', text: n => t('Link {n} guardians', { n: n.toLocaleString('en-US') }), target: geometric(1, 2.5) },
+  { id: 'combo', name: 'Chain Singer', text: n => t('Reach a {n}-hit combo', { n }), target: tier => 10 + tier * 5 },
+  { id: 'score', name: 'Fortune', text: n => t('Score {n} in one expedition', { n: n.toLocaleString('en-US') }), target: geometric(1500, 2.2) },
+  { id: 'depth', name: 'Deep Diver', text: n => t(n === 1 ? 'Clear {n} circuit in one expedition' : 'Clear {n} circuits in one expedition', { n }), target: tier => tier + 1 },
 ]
 
 export function featReward(tier: number): number {

@@ -1,6 +1,7 @@
 import { CHALLENGES } from '../content/catalog'
 import type { SaveData } from './save'
 import { TUNING } from '../tuning'
+import { t } from '../i18n'
 
 export interface RunFacts {
   bestCombo: number
@@ -21,7 +22,8 @@ export function grantChallenges(save: SaveData, facts: RunFacts): string[] {
     if (!ok || save.challenges.includes(id)) return
     save.challenges.push(id)
     save.shards += TUNING.challengeShards
-    fresh.push(CHALLENGES.find((c) => c.id === id)?.name ?? id)
+    const challenge = CHALLENGES.find((c) => c.id === id)
+    fresh.push(challenge ? t(challenge.name) : id)
   }
   done('combo10', facts.bestCombo >= 10)
   done('mult4', facts.bestMult >= 4)

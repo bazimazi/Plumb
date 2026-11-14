@@ -15,12 +15,13 @@
     "verify:builds": "tsx scripts/verify-builds.ts",
     "verify:routes": "tsx scripts/verify-routes.ts",
     "verify:expeditions": "tsx scripts/verify-expeditions.ts",
-    "test": "npm run verify:builds && npm run verify:momentum && npm run verify:encounters && npm run verify:reports && npm run verify:routes && npm run verify:progression && npm run verify:expeditions",
+    "test": "npm run verify:builds && npm run verify:momentum && npm run verify:encounters && npm run verify:reports && npm run verify:routes && npm run verify:progression && npm run verify:expeditions && npm run verify:i18n",
     "verify:progression": "tsx scripts/verify-progression.ts",
     "verify:momentum": "tsx scripts/verify-momentum.ts",
     "verify:browser": "playwright test",
     "verify:encounters": "tsx scripts/verify-encounters.ts",
-    "verify:reports": "tsx scripts/verify-reports.ts"
+    "verify:reports": "tsx scripts/verify-reports.ts",
+    "verify:i18n": "tsx scripts/verify-i18n.ts"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.9",
@@ -33,6 +34,7 @@
   },
   "dependencies": {
     "@fontsource-variable/fredoka": "^5.3.0",
+    "@fontsource-variable/vazirmatn": "^5.3.0",
     "@fontsource/lilita-one": "^5.3.0"
   }
 }

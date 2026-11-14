@@ -102,6 +102,8 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', error => errors.push(error.message))
   ;(page as Page & { gameErrors?: string[] }).gameErrors = errors
   await page.addInitScript(() => {
+    // These assertions read the English copy; Persian is the default, so tests opt in to English.
+    if (!localStorage.getItem('plumb-lang')) localStorage.setItem('plumb-lang', 'en')
     if (!localStorage.getItem('plumb-save-v1')) localStorage.setItem('plumb-save-v1', JSON.stringify({
       version: 1, settings: { volume: 0, speed: 1 },
     }))
@@ -414,4 +416,53 @@ test('classic challenge links and checkpoints retain their original guardian-fre
   await expect(page.locator('.encounter-instrument:visible')).toHaveCount(0)
   await cleanLayout(page)
   await capture(page, info, 'classic-route')
+})
+
+test('Persian is the default language, lays out right to left, and the choice of English persists', async ({ page }, info) => {
+  // Start from a player who never picked a language (the shared setup pins English for the other tests).
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('plumb-test-fresh-lang')) {
+      sessionStorage.setItem('plumb-test-fresh-lang', '1')
+      localStorage.removeItem('plumb-lang')
+    }
+  })
+  const persian = /[؀-ۿ]/
+  await page.goto('/')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'fa')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+  await expect(action(page, 'start')).toContainText(persian)
+  await expect(page.locator('.home-nav')).toContainText(persian)
+  await cleanLayout(page)
+  await capture(page, info, 'hub-fa')
+
+  await action(page, 'settings').click()
+  await expect(action(page, 'lang:fa')).toHaveAttribute('aria-pressed', 'true')
+  await cleanLayout(page)
+  await capture(page, info, 'settings-fa')
+  await action(page, 'back').click()
+
+  await action(page, 'start').click()
+  await expect(page.locator('.card.offer')).toHaveCount(3)
+  await expect(page.locator('.card.offer').first()).toContainText(persian)
+  await cleanLayout(page)
+  await capture(page, info, 'relic-draft-fa')
+  await action(page, 'pick:0').click()
+  await expect(page.locator('#app')).toHaveAttribute('data-mode', 'aim')
+  await expect(page.locator('#hud')).toContainText(persian)
+  await cleanLayout(page)
+  await capture(page, info, 'workshop-aim-fa')
+  await action(page, 'pause-btn').click()
+  await action(page, 'journal').click()
+  await expect(page.locator('.route-act').first()).toContainText(persian)
+  await cleanLayout(page)
+  await capture(page, info, 'journal-fa')
+  await action(page, 'close-journal').first().click()
+  await action(page, 'settings').click()
+
+  await action(page, 'lang:en').click()
+  await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
+  await expect(page.locator('.screen-title h2')).toHaveText('Settings')
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
 })

@@ -1,3 +1,4 @@
+import { list, source, t } from '../i18n'
 import type { DropReport } from '../sim/report'
 
 export interface BallCard {
@@ -200,7 +201,7 @@ export type StageModel =
   | { kind: 'quests'; daily: QuestRow[]; weekly: QuestRow[]; resetHours: number; feats: { name: string; text: string; value: number; target: number; tier: number; reward: number }[] }
   | { kind: 'help' }
   | { kind: 'collection'; balls: CollItem[]; relics: CollItem[]; parts: CollItem[]; challenges: CollItem[]; lore: string[]; pegs: number }
-  | { kind: 'settings'; shake: boolean; particles: boolean; flash: boolean; large: boolean; volume: number; speed: number; haptics?: boolean; hapticsAvailable?: boolean; quality?: 'auto' | 'high' | 'saver' }
+  | { kind: 'settings'; shake: boolean; particles: boolean; flash: boolean; large: boolean; volume: number; speed: number; haptics?: boolean; hapticsAvailable?: boolean; quality?: 'auto' | 'high' | 'saver'; lang?: string; langs?: { id: string; name: string }[] }
   | { kind: 'choices'; kicker: string; title: string; build: string; cards: ChoiceCard[]; skip: string }
   | { kind: 'shop'; gears: number; cards: ChoiceCard[]; reroll: number; canReroll: boolean; build: string; repairCost: number; canRepair: boolean }
   | { kind: 'fork'; title: string; options: ForkCard[] }
@@ -228,6 +229,11 @@ export interface ViewModel {
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
+}
+
+/** "a / b" that keeps its left-to-right order inside right-to-left text (a leading LRM). */
+function ratio(a: string | number, b: string | number): string {
+  return `‎${a} / ${b}`
 }
 
 function pips(on: number, max: number, cls = ''): string {
@@ -367,7 +373,7 @@ export class UI {
         if (details.length === opened.length) details.forEach((d, i) => { d.open = opened[i] })
         if (focusedAction) Array.from(this.stage.querySelectorAll<HTMLElement>('[data-act]')).find(el => el.dataset.act === focusedAction)?.focus({ preventScroll: true })
       }
-      if (['choices', 'fork', 'shop', 'event', 'bargain', 'repair', 'victory'].includes(view.stage.kind)) this.stage.insertAdjacentHTML('beforeend', `<button class="round-btn decision-journal" data-act="journal" aria-label="Build and route">${ico('map')}<kbd>J</kbd></button>`)
+      if (['choices', 'fork', 'shop', 'event', 'bargain', 'repair', 'victory'].includes(view.stage.kind)) this.stage.insertAdjacentHTML('beforeend', `<button class="round-btn decision-journal" data-act="journal" aria-label="${esc(t('Build and route'))}">${ico('map')}<kbd>J</kbd></button>`)
       this.stage.className = view.stage.kind === 'none' ? '' : 'open'
       this.stage.dataset.kind = view.stage.kind
       // Only play entrance animations when the screen itself changes, not on in-place refreshes.
@@ -427,28 +433,28 @@ export class UI {
       delete this.hud.dataset.practice
       return
     }
-    const key = `${hud.aiming}|${hud.overview}|${hud.playing}|${hud.showFlip}|${hud.maxSpecials}|${hud.maxTilts}|${hud.maxNudges}|${hud.core}|${hud.jackpot}|${!!hud.practice}`
+    const key = `${document.documentElement.lang}|${hud.aiming}|${hud.overview}|${hud.playing}|${hud.showFlip}|${hud.maxSpecials}|${hud.maxTilts}|${hud.maxNudges}|${hud.core}|${hud.jackpot}|${!!hud.practice}`
     if (key !== this.hudKey) {
       this.hudKey = key
       this.prev = {}
       this.hud.innerHTML = `
         <div class="hud-res">
-          <div class="chip res shell" data-hud="shell-wrap"><span>Shell</span><b data-hud="shell"></b></div>
-          <div class="chip res gears"><span>Gears</span><b data-hud="gears"></b></div>
-          <div class="chip dim score"><span>Score</span><b data-hud="score"></b></div>
+          <div class="chip res shell" data-hud="shell-wrap"><span>${esc(t('Shell'))}</span><b data-hud="shell"></b></div>
+          <div class="chip res gears"><span>${esc(t('Gears'))}</span><b data-hud="gears"></b></div>
+          <div class="chip dim score"><span>${esc(t('Score'))}</span><b data-hud="score"></b></div>
         </div>
         <div class="hud-mult">
           <div class="chip mult" data-hud="mult-wrap">
-            <span>Multiplier</span><b data-hud="mult"></b>
-            <div class="meter" title="Jackpot pockets pay out once the multiplier reaches ${esc(hud.jackpotAt)}"><i data-hud="mult-fill"></i></div>
-            <em class="meter-label">Hot at ${esc(hud.jackpotAt)}</em>
+            <span>${esc(t('Multiplier'))}</span><b data-hud="mult"></b>
+            <div class="meter" title="${esc(t('Jackpot pockets pay out once the multiplier reaches {mult}', { mult: hud.jackpotAt }))}"><i data-hud="mult-fill"></i></div>
+            <em class="meter-label">${esc(t('Hot at {mult}', { mult: hud.jackpotAt }))}</em>
           </div>
-          <div class="chip combo" data-hud="combo-wrap"><span>Combo</span><b data-hud="combo"></b><div class="meter thin"><i data-hud="combo-fill"></i></div></div>
+          <div class="chip combo" data-hud="combo-wrap"><span>${esc(t('Combo'))}</span><b data-hud="combo"></b><div class="meter thin"><i data-hud="combo-fill"></i></div></div>
         </div>
         <div class="hud-btns">
-          <button class="round-btn mobile-journal" data-act="journal" aria-label="Open build and route journal">${ico('map')}</button>
-          <button class="round-btn util-btn" data-act="mute" aria-label="Toggle sound"><span data-hud="mute"></span></button>
-          <button class="round-btn esc" data-act="pause-btn" title="Pause" aria-label="Pause">${ico('pause')}<kbd>Esc</kbd></button>
+          <button class="round-btn mobile-journal" data-act="journal" aria-label="${esc(t('Open build and route journal'))}">${ico('map')}</button>
+          <button class="round-btn util-btn" data-act="mute" aria-label="${esc(t('Toggle sound'))}"><span data-hud="mute"></span></button>
+          <button class="round-btn esc" data-act="pause-btn" title="${esc(t('Pause'))}" aria-label="${esc(t('Pause'))}">${ico('pause')}<kbd>Esc</kbd></button>
         </div>
         <div class="mobile-place"><b data-hud="mobile-title"></b><span data-hud="mobile-status"></span>${encounterHtml('mobile')}${coachHtml('mobile')}</div>
         <aside class="hud-info">
@@ -463,22 +469,22 @@ export class UI {
             <p class="anomaly" data-hud="anomaly"></p>
             <p class="objective" data-hud="objective"></p>
           </div>
-          <div class="chip dim build"><span>Build</span><b data-hud="synergy"></b></div>
-          <button class="texty seed-btn" data-act="copy-seed" title="Copy seed"><span class="ico-hash">#</span><span data-hud="seed"></span></button>
+          <div class="chip dim build"><span>${esc(t('Build'))}</span><b data-hud="synergy"></b></div>
+          <button class="texty seed-btn" data-act="copy-seed" title="${esc(t('Copy seed'))}"><span class="ico-hash">#</span><span data-hud="seed"></span></button>
           ${encounterHtml('desktop')}
           ${coachHtml('desktop')}
         </aside>
-        ${hud.practice ? '<div class="practice-toolbar" aria-label="Practice controls"><span>Practice</span><button class="btn" data-act="lab-retry">Restart</button><button class="btn" data-act="lab-configure">Configure</button><button class="btn practice-journal" data-act="journal">Journal</button></div>' : ''}
-        <div class="tally" data-hud="tally"><span>This drop</span><b data-hud="earned"></b></div>
+        ${hud.practice ? `<div class="practice-toolbar" aria-label="${esc(t('Practice controls'))}"><span>${esc(t('Practice'))}</span><button class="btn" data-act="lab-retry">${esc(t('Restart'))}</button><button class="btn" data-act="lab-configure">${esc(t('Configure'))}</button><button class="btn practice-journal" data-act="journal">${esc(t('Journal'))}</button></div>` : ''}
+        <div class="tally" data-hud="tally"><span>${esc(t('This drop'))}</span><b data-hud="earned"></b></div>
         <div class="controls ${hud.aiming ? 'aim-controls' : 'drop-controls'}">
-          ${hud.playing && hud.aiming ? `<button class="release-sphere btn btn-go" data-act="launch">${ico('down', 'release-symbol')}<span>Release<small class="pointer-only">Mouse or ← → to aim</small><small class="touch-only">or drag the board, lift to drop</small></span><kbd>Enter</kbd></button>` : ''}
-          ${hud.playing && hud.aiming ? `<button class="machine-overview btn ${hud.overview ? 'selected' : ''}" data-act="overview" aria-pressed="${hud.overview}">${ico('eye')}<kbd>V</kbd><span>${hud.overview ? 'Back' : 'Inspect'}</span></button>` : ''}
-          ${hud.playing && !hud.aiming ? keyBtn('nudge-left', 'A', 'Nudge', 'nudges') : ''}
+          ${hud.playing && hud.aiming ? `<button class="release-sphere btn btn-go" data-act="launch">${ico('down', 'release-symbol')}<span>${esc(t('Release'))}<small class="pointer-only">${esc(t('Mouse or ← → to aim'))}</small><small class="touch-only">${esc(t('or drag the board, lift to drop'))}</small></span><kbd>Enter</kbd></button>` : ''}
+          ${hud.playing && hud.aiming ? `<button class="machine-overview btn ${hud.overview ? 'selected' : ''}" data-act="overview" aria-pressed="${hud.overview}">${ico('eye')}<kbd>V</kbd><span>${esc(hud.overview ? t('Back') : t('Inspect'))}</span></button>` : ''}
+          ${hud.playing && !hud.aiming ? keyBtn('nudge-left', 'A', esc(t('Nudge')), 'nudges') : ''}
           ${hud.playing && !hud.aiming && hud.maxSpecials > 0 ? keyBtn('special', 'Space', esc(hud.specialName), 'specials') : ''}
-          ${hud.playing && !hud.aiming && hud.maxTilts > 0 ? keyBtn('tilt', 'Q', 'Tilt', 'tilts') : ''}
-          ${hud.playing && !hud.aiming ? `<button class="key overdrive-key" data-act="overdrive" data-hud="overdrive" title="Strike five different pegs to charge. Overdrive doubles payouts for three seconds and lifts the sphere."><span class="drive-fill" data-hud="drive-fill"></span>${ico('bolt', 'drive-ico')}<kbd>E</kbd><span class="lbl" data-hud="drive-label">Overdrive</span><span class="drive-status" data-hud="drive-status"></span></button>` : ''}
-          ${hud.playing && !hud.aiming && hud.showFlip ? keyBtn('flip', 'F', 'Flip gate', '') : ''}
-          ${hud.playing && !hud.aiming ? keyBtn('nudge-right', 'D', 'Nudge', 'nudges') : ''}
+          ${hud.playing && !hud.aiming && hud.maxTilts > 0 ? keyBtn('tilt', 'Q', esc(t('Tilt')), 'tilts') : ''}
+          ${hud.playing && !hud.aiming ? `<button class="key overdrive-key" data-act="overdrive" data-hud="overdrive" title="${esc(t('Strike five different pegs to charge. Overdrive doubles payouts for three seconds and lifts the sphere.'))}"><span class="drive-fill" data-hud="drive-fill"></span>${ico('bolt', 'drive-ico')}<kbd>E</kbd><span class="lbl" data-hud="drive-label">${esc(t('Overdrive'))}</span><span class="drive-status" data-hud="drive-status"></span></button>` : ''}
+          ${hud.playing && !hud.aiming && hud.showFlip ? keyBtn('flip', 'F', esc(t('Flip gate')), '') : ''}
+          ${hud.playing && !hud.aiming ? keyBtn('nudge-right', 'D', esc(t('Nudge')), 'nudges') : ''}
         </div>`
     }
     const q = (name: string) => this.hud.querySelector(`[data-hud="${name}"]`)
@@ -548,10 +554,10 @@ export class UI {
       if (hud.encounter) {
         const e = hud.encounter
         set(`${variant}-encounter-title`, e.title)
-        set(`${variant}-encounter-instruction`, e.complete ? hud.practice ? 'Practice objective complete' : 'Bounty secured' : e.instruction)
-        set(`${variant}-encounter-count`, `${Math.min(e.progress, e.target)} / ${e.target}`)
+        set(`${variant}-encounter-instruction`, e.complete ? hud.practice ? t('Practice objective complete') : t('Bounty secured') : e.instruction)
+        set(`${variant}-encounter-count`, ratio(Math.min(e.progress, e.target), e.target))
         set(`${variant}-encounter-reward`, e.reward)
-        set(`${variant}-encounter-returns`, `${e.returns}/${e.maxReturns} safe return${e.maxReturns === 1 ? '' : 's'}`)
+        set(`${variant}-encounter-returns`, t(e.maxReturns === 1 ? '{n}/{max} safe return' : '{n}/{max} safe returns', { n: e.returns, max: e.maxReturns }))
         set(`${variant}-encounter-hint`, e.hint)
         const sequence = q(`${variant}-encounter-sequence`) as HTMLElement | null
         const sequenceKey = `${e.title}|${e.progress}|${e.target}|${e.linked?.join(',')}|${e.targets?.join(',')}`
@@ -563,13 +569,13 @@ export class UI {
       const coach = q(`${variant}-coach`) as HTMLElement | null
       if (coach) coach.hidden = !hud.coach
       if (hud.coach) {
-        set(`${variant}-coach-step`, `${hud.coach.step} / 3`)
+        set(`${variant}-coach-step`, ratio(hud.coach.step, 3))
         const mobile = variant === 'mobile'
         const action = hud.coach.action
-        const mobileTitle = action === 'launch' ? 'Release' : action === 'nudge' ? 'Nudge' : action === 'overdrive' ? 'Overdrive' : hud.coach.title
-        const mobileText = action === 'launch' ? 'Aim for your first peg. Tap Release sphere.'
-          : action === 'nudge' ? `${coarse() ? '' : 'A / D or '}Nudge pushes toward a useful lane.`
-            : action === 'overdrive' ? hud.overdriveReady ? `${coarse() ? '' : 'E / '}Overdrive lifts the sphere: 2× payouts for 3s.` : 'Hit five different pegs to charge Overdrive.'
+        const mobileTitle = action === 'launch' ? t('Release') : action === 'nudge' ? t('Nudge') : action === 'overdrive' ? t('Overdrive') : hud.coach.title
+        const mobileText = action === 'launch' ? t('Aim for your first peg. Tap Release sphere.')
+          : action === 'nudge' ? coarse() ? t('Nudge pushes toward a useful lane.') : t('A / D or Nudge pushes toward a useful lane.')
+            : action === 'overdrive' ? hud.overdriveReady ? coarse() ? t('Overdrive lifts the sphere: 2× payouts for 3s.') : t('E / Overdrive lifts the sphere: 2× payouts for 3s.') : t('Hit five different pegs to charge Overdrive.')
               : hud.coach.text
         set(`${variant}-coach-title`, mobile ? mobileTitle : hud.coach.title)
         set(`${variant}-coach-text`, mobile ? mobileText : hud.coach.text)
@@ -590,9 +596,9 @@ export class UI {
       drive.disabled = !hud.overdriveReady
       drive.classList.toggle('ready', hud.overdriveReady)
       drive.classList.toggle('active', active)
-      drive.setAttribute('aria-label', active ? `Overdrive active, ${hud.overdriveTime.toFixed(1)} seconds` : hud.overdriveReady ? 'Activate Overdrive. Double payouts for three seconds.' : `Overdrive charging, ${Math.round(hud.charge * 100)} percent`)
-      set('drive-label', active ? '2× OVERDRIVE' : 'Overdrive')
-      set('drive-status', active ? `${hud.overdriveTime.toFixed(1)}s` : hud.overdriveReady ? 'READY' : hud.overdriveUses <= 0 ? 'SPENT' : `${Math.round(hud.charge * 100)}%`)
+      drive.setAttribute('aria-label', active ? t('Overdrive active, {s} seconds', { s: hud.overdriveTime.toFixed(1) }) : hud.overdriveReady ? t('Activate Overdrive. Double payouts for three seconds.') : t('Overdrive charging, {n} percent', { n: Math.round(hud.charge * 100) }))
+      set('drive-label', active ? t('2× OVERDRIVE') : t('Overdrive'))
+      set('drive-status', active ? t('{s}s', { s: hud.overdriveTime.toFixed(1) }) : hud.overdriveReady ? t('READY') : hud.overdriveUses <= 0 ? t('SPENT') : `${Math.round(hud.charge * 100)}%`)
       const fill = q('drive-fill') as HTMLElement | null
       if (fill) fill.style.transform = `scaleX(${Math.max(0, Math.min(1, active ? hud.overdriveTime / 3 : hud.charge))})`
     }
@@ -632,7 +638,7 @@ export class UI {
       if (flip.disabled !== spent) {
         flip.disabled = spent
         const label = flip.querySelector('.lbl')
-        if (label) label.textContent = spent ? 'Gate spent' : 'Flip gate'
+        if (label) label.textContent = spent ? t('Gate spent') : t('Flip gate')
         if (spent) bump(flip, 0.92)
       }
     }
@@ -642,9 +648,10 @@ export class UI {
         b.disabled = off || cooling
         b.classList.toggle('cooling', cooling)
         if (cooling) {
-          const label = b.querySelector('.lbl')?.textContent ?? 'Control'
-          b.setAttribute('aria-label', `${label} recovering, ${cooldown.toFixed(1)} seconds`)
-          b.title = `${label} recovering · ${cooldown.toFixed(1)}s`
+          const label = b.querySelector('.lbl')?.textContent ?? t('Control')
+          const s = cooldown.toFixed(1)
+          b.setAttribute('aria-label', t('{label} recovering, {s} seconds', { label, s }))
+          b.title = t('{label} recovering · {s}s', { label, s })
         } else {
           b.removeAttribute('aria-label')
           b.removeAttribute('title')
@@ -699,7 +706,9 @@ const ICONS: Record<string, string> = {
 }
 
 function ico(name: string, cls = ''): string {
-  return `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] ?? ICONS.star}</svg>`
+  // Back and next chevrons mirror in right-to-left languages (CSS keeps physical controls unmirrored).
+  const dir = name === 'back' || name === 'next' ? ' ico-dir' : ''
+  return `<svg class="ico ${cls}${dir}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] ?? ICONS.star}</svg>`
 }
 
 const TAG_TONE: Record<string, string> = {
@@ -712,14 +721,21 @@ const KIND_TONE: Record<string, string> = {
   coil: 'cyan', shell: 'green', portal: 'violet', gravity: 'violet', forge: 'orange', coin: 'gold', prism: 'cyan', star: 'gold', oracle: 'violet',
 }
 
+/** The English tag id behind a (possibly translated) tag label, so tones work in every language. */
+function tagId(tag: string): string {
+  const id = source(tag.trim()).toLowerCase()
+  if (id in TAG_TONE) return id
+  return Object.keys(TAG_TONE).find(k => t(k) === tag.trim()) ?? id
+}
+
 function toneOf(tags: string): string {
-  const first = tags.split('·')[0]?.trim().toLowerCase() ?? ''
-  return TAG_TONE[first] ?? 'blue'
+  const first = tags.split('·')[0]?.trim() ?? ''
+  return TAG_TONE[tagId(first)] ?? 'blue'
 }
 
 function tagChips(tags: string): string {
-  const list = tags.split('·').map(t => t.trim()).filter(Boolean)
-  return list.length ? `<span class="chips">${list.map(t => `<i class="chip-tag t-${TAG_TONE[t.toLowerCase()] ?? 'blue'}">${esc(t)}</i>`).join('')}</span>` : ''
+  const list = tags.split('·').map(tag => tag.trim()).filter(Boolean)
+  return list.length ? `<span class="chips">${list.map(tag => `<i class="chip-tag t-${TAG_TONE[tagId(tag)] ?? 'blue'}">${esc(tag)}</i>`).join('')}</span>` : ''
 }
 
 function gem(kind: string, tone: string, cls = ''): string {
@@ -744,7 +760,7 @@ function toggle(id: string, label: string, on: boolean, icon = 'sparkle'): strin
 }
 
 function screen(cls: string, title: string, body: string, opts: { back?: string; kicker?: string; extra?: string } = {}): string {
-  return `<article class="screen ${cls}"><header class="screen-head">${opts.back ? `<button class="round-btn back" data-act="${opts.back}" aria-label="Back">${ico('back')}</button>` : '<span class="head-spacer"></span>'}<div class="screen-title">${opts.kicker ? `<small>${esc(opts.kicker)}</small>` : ''}<h2>${title}</h2></div>${opts.extra ?? '<span class="head-spacer"></span>'}</header><div class="screen-body">${body}</div></article>`
+  return `<article class="screen ${cls}"><header class="screen-head">${opts.back ? `<button class="round-btn back" data-act="${opts.back}" aria-label="${esc(t('Back'))}">${ico('back')}</button>` : '<span class="head-spacer"></span>'}<div class="screen-title">${opts.kicker ? `<small>${esc(opts.kicker)}</small>` : ''}<h2>${title}</h2></div>${opts.extra ?? '<span class="head-spacer"></span>'}</header><div class="screen-body">${body}</div></article>`
 }
 
 function wallet(kind: 'dust' | 'shard' | 'gears', value: number, label = ''): string {
@@ -756,13 +772,14 @@ function wallet(kind: 'dust' | 'shard' | 'gears', value: number, label = ''): st
 // HUD fragments
 
 function keyBtn(act: string, key: string, label: string, pipSlot: string): string {
-  const touch = act === 'nudge-left' ? 'Nudge' : act === 'nudge-right' ? 'Nudge' : act === 'flip' ? 'Gate' : label
+  const touch = act === 'nudge-left' || act === 'nudge-right' ? esc(t('Nudge')) : act === 'flip' ? esc(t('Gate')) : label
   const icon = act === 'nudge-left' ? 'back' : act === 'nudge-right' ? 'next' : act === 'flip' ? 'flag' : act === 'tilt' ? 'refresh' : 'sparkle'
   return `<button class="key key-${act}" data-act="${act}">${ico(icon, 'key-ico')}<kbd>${key}</kbd><span class="lbl">${label}</span><span class="touch-label">${touch}</span>${pipSlot ? `<span class="key-pips" data-pips="${pipSlot}"></span>` : ''}</button>`
 }
 
 function encounterSequence(e: EncounterModel): string {
-  const forge = /heartforge|alternate/i.test(`${e.title} ${e.instruction}`)
+  // Model text may be translated: test the English source of each field.
+  const forge = /heartforge|alternate/i.test(`${source(e.title)} ${source(e.instruction)}`)
   return Array.from({ length: Math.max(1, Math.min(8, e.target)) }, (_, i) => {
     const credited = forge ? i < e.progress : !!e.linked?.includes(i)
     const valid = forge ? i === e.progress : e.targets ? e.targets.includes(i) : !credited
@@ -772,15 +789,15 @@ function encounterSequence(e: EncounterModel): string {
 }
 
 function encounterHtml(variant: string): string {
-  return `<section class="encounter-instrument ${variant}-encounter" data-hud="${variant}-encounter" hidden aria-label="Guardian objective"><div class="encounter-heading"><span>Guardian</span><b data-hud="${variant}-encounter-title"></b></div><strong data-hud="${variant}-encounter-instruction"></strong><div class="encounter-progress"><span class="encounter-sequence" data-hud="${variant}-encounter-sequence" aria-hidden="true"></span><b data-hud="${variant}-encounter-count"></b></div><p class="encounter-target" data-hud="${variant}-encounter-hint"></p><div class="encounter-contract"><span class="encounter-bounty" data-hud="${variant}-encounter-reward"></span><span class="encounter-returns" data-hud="${variant}-encounter-returns"></span></div><button class="texty encounter-rules" data-act="journal">Guardian rules <kbd>J</kbd></button></section>`
+  return `<section class="encounter-instrument ${variant}-encounter" data-hud="${variant}-encounter" hidden aria-label="${esc(t('Guardian objective'))}"><div class="encounter-heading"><span>${esc(t('Guardian'))}</span><b data-hud="${variant}-encounter-title"></b></div><strong data-hud="${variant}-encounter-instruction"></strong><div class="encounter-progress"><span class="encounter-sequence" data-hud="${variant}-encounter-sequence" aria-hidden="true"></span><b data-hud="${variant}-encounter-count"></b></div><p class="encounter-target" data-hud="${variant}-encounter-hint"></p><div class="encounter-contract"><span class="encounter-bounty" data-hud="${variant}-encounter-reward"></span><span class="encounter-returns" data-hud="${variant}-encounter-returns"></span></div><button class="texty encounter-rules" data-act="journal">${esc(t('Guardian rules'))} <kbd>J</kbd></button></section>`
 }
 
 function coachHtml(variant: string): string {
-  return `<aside class="workshop-coach ${variant}-coach" data-hud="${variant}-coach" hidden aria-label="Workshop tips" aria-live="polite" aria-atomic="true"><div class="coach-heading"><span data-hud="${variant}-coach-step"></span><b data-hud="${variant}-coach-title"></b><button class="coach-dismiss" data-act="coach-dismiss" aria-label="Dismiss Workshop tips"><span aria-hidden="true">×</span></button></div><p data-hud="${variant}-coach-text"></p></aside>`
+  return `<aside class="workshop-coach ${variant}-coach" data-hud="${variant}-coach" hidden aria-label="${esc(t('Workshop tips'))}" aria-live="polite" aria-atomic="true"><div class="coach-heading"><span data-hud="${variant}-coach-step"></span><b data-hud="${variant}-coach-title"></b><button class="coach-dismiss" data-act="coach-dismiss" aria-label="${esc(t('Dismiss Workshop tips'))}"><span aria-hidden="true">×</span></button></div><p data-hud="${variant}-coach-text"></p></aside>`
 }
 
 function encounterBriefing(e: EncounterModel, practice = false): string {
-  return `<section class="guardian-briefing panel ${e.complete ? 'complete' : ''}"><div class="gb-head">${ico('bolt')}<div><small>${practice ? 'Practice guardian' : 'Optional guardian'}</small><h3>${esc(e.title)}</h3></div><b class="gb-count">${Math.min(e.progress, e.target)} / ${e.target}</b></div><strong>${esc(e.complete ? practice ? 'Practice objective complete' : 'Bounty secured' : e.instruction)}</strong><span class="encounter-sequence" aria-hidden="true">${encounterSequence(e)}</span><p>${esc(e.hint)}</p><div class="guardian-terms"><span><b>${practice ? 'Objective' : 'Bounty'}</b>${esc(e.reward)}</span><span><b>Safety reserve</b>${e.returns} of ${e.maxReturns} safe return${e.maxReturns === 1 ? '' : 's'} remaining</span></div><p class="fine">Once per machine, entering a safe collector before 75 seconds returns the sphere while an unfinished objective keeps its progress. Gutters still follow normal hazard rules. After the return is spent or its time window expires, collectors settle the drop normally. ${practice ? 'Practice records the objective without awarding expedition rewards.' : 'The bounty is optional: an incomplete objective never blocks the normal route.'}</p></section>`
+  return `<section class="guardian-briefing panel ${e.complete ? 'complete' : ''}"><div class="gb-head">${ico('bolt')}<div><small>${esc(practice ? t('Practice guardian') : t('Optional guardian'))}</small><h3>${esc(e.title)}</h3></div><b class="gb-count">${ratio(Math.min(e.progress, e.target), e.target)}</b></div><strong>${esc(e.complete ? practice ? t('Practice objective complete') : t('Bounty secured') : e.instruction)}</strong><span class="encounter-sequence" aria-hidden="true">${encounterSequence(e)}</span><p>${esc(e.hint)}</p><div class="guardian-terms"><span><b>${esc(practice ? t('Objective') : t('Bounty'))}</b>${esc(e.reward)}</span><span><b>${esc(t('Safety reserve'))}</b>${esc(t(e.maxReturns === 1 ? '{n} of {max} safe return remaining' : '{n} of {max} safe returns remaining', { n: e.returns, max: e.maxReturns }))}</span></div><p class="fine">${esc(t('Once per machine, entering a safe collector before 75 seconds returns the sphere while an unfinished objective keeps its progress. Gutters still follow normal hazard rules. After the return is spent or its time window expires, collectors settle the drop normally.'))} ${esc(practice ? t('Practice records the objective without awarding expedition rewards.') : t('The bounty is optional: an incomplete objective never blocks the normal route.'))}</p></section>`
 }
 
 // ---------------------------------------------------------------------------
@@ -789,7 +806,7 @@ function encounterBriefing(e: EncounterModel, practice = false): string {
 function choiceHtml(c: ChoiceCard, act: 'pick' | 'buy' | 'event'): string {
   const kind = artifactKind(c.name, c.tags)
   const tone = toneOf(c.tags)
-  const cta = !c.afford ? (act === 'buy' ? 'Not enough gears' : 'Unavailable') : act === 'buy' ? 'Buy' : act === 'event' ? 'Choose' : 'Take'
+  const cta = esc(!c.afford ? (act === 'buy' ? t('Not enough gears') : t('Unavailable')) : act === 'buy' ? t('Buy') : act === 'event' ? t('Choose') : t('Take'))
   return `<button class="card offer t-${tone} ${c.synergy ? 'has-syn' : ''}" data-act="${act}:${c.index}" style="--i:${c.index}" ${c.afford ? '' : 'disabled'}>
       <kbd class="num">${c.index + 1}</kbd>
       ${gem(kind, tone, 'relic-art')}
@@ -804,7 +821,7 @@ function choiceHtml(c: ChoiceCard, act: 'pick' | 'buy' | 'event'): string {
 }
 
 function block(title: string, items: CollItem[], cls = ''): string {
-  return `<section class="block ${cls}"><h3 class="section-h">${esc(title)}</h3>${items.length ? `<ul class="archive">${items.map(item => `<li class="${item.known ? '' : 'unknown'}">${item.known ? gem(artifactKind(item.name), KIND_TONE[artifactKind(item.name)] ?? 'blue', 'mini') : `<span class="gem mini locked">${ico('lock')}</span>`}<div><b>${esc(item.known ? item.name : 'Unknown')}</b><span>${esc(item.text)}</span></div></li>`).join('')}</ul>` : '<p class="empty">Nothing yet.</p>'}</section>`
+  return `<section class="block ${cls}"><h3 class="section-h">${esc(title)}</h3>${items.length ? `<ul class="archive">${items.map(item => `<li class="${item.known ? '' : 'unknown'}">${item.known ? gem(artifactKind(item.name), KIND_TONE[artifactKind(item.name)] ?? 'blue', 'mini') : `<span class="gem mini locked">${ico('lock')}</span>`}<div><b>${esc(item.known ? item.name : t('Unknown'))}</b><span>${esc(item.text)}</span></div></li>`).join('')}</ul>` : `<p class="empty">${esc(t('Nothing yet.'))}</p>`}</section>`
 }
 
 function stat(label: string, value: string, icon: string, tone = ''): string {
@@ -833,24 +850,25 @@ function laboratoryHtml(lab: LabModel): string {
   const sphereColors: Record<string, [string, string, string]> = {
     rubber: ['#ffd2c4', '#ff6a52', '#8a2418'], prism: ['#7eefe6', '#e7fff8', '#1c6e78'], void: ['#c4b6ff', '#2a2144', '#090712'],
   }
-  return `<article class="screen laboratory"><header class="screen-head"><button class="round-btn back" data-act="lab-exit" aria-label="Return to hub">${ico('back')}</button><div class="screen-title"><small>Practice · no rewards, no risk</small><h2>Laboratory</h2></div><span class="head-spacer"></span></header><div class="screen-body">
-    <h3 class="section-h">1 · Machine</h3>
+  return `<article class="screen laboratory"><header class="screen-head"><button class="round-btn back" data-act="lab-exit" aria-label="${esc(t('Return to hub'))}">${ico('back')}</button><div class="screen-title"><small>${esc(t('Practice · no rewards, no risk'))}</small><h2>${esc(t('Laboratory'))}</h2></div><span class="head-spacer"></span></header><div class="screen-body">
+    <h3 class="section-h">1 · ${esc(t('Machine'))}</h3>
     <div class="lab-machines">${lab.machines.map(m => `<button class="lab-machine ${m.selected ? 'selected' : ''}" data-act="lab-machine:${esc(m.id)}" aria-pressed="${m.selected}">${machineSchematic(m.id)}<strong>${esc(m.name)}</strong></button>`).join('')}</div>
-    <div class="lab-current-machine panel"><div><small>Goal</small><h3>${esc(lab.title)}</h3><p>${esc(lab.description)}</p></div></div>
-    ${lab.matched ? '<p class="lab-matched">↳ Matched to your last machine: its seed, sphere, and installed build.</p>' : ''}
-    <h3 class="section-h">2 · Sphere</h3>
+    <div class="lab-current-machine panel"><div><small>${esc(t('Goal'))}</small><h3>${esc(lab.title)}</h3><p>${esc(lab.description)}</p></div></div>
+    ${lab.matched ? `<p class="lab-matched">↳ ${esc(t('Matched to your last machine: its seed, sphere, and installed build.'))}</p>` : ''}
+    <h3 class="section-h">2 · ${esc(t('Sphere'))}</h3>
     <div class="lab-spheres">${lab.spheres.map(s => `<button class="lab-sphere ${s.selected ? 'selected' : ''}" data-act="lab-sphere:${esc(s.id)}" aria-pressed="${s.selected}">${orb(sphereColors[s.id] ?? sphereColors.rubber)}<span>${esc(s.name)}</span></button>`).join('')}</div>
-    <h3 class="section-h">3 · Loadout</h3>
+    <h3 class="section-h">3 · ${esc(t('Loadout'))}</h3>
     <div class="lab-builds">${lab.builds.map(b => `<button class="lab-build ${b.selected ? 'selected' : ''}" data-act="lab-build:${esc(b.id)}" aria-pressed="${b.selected}"><strong>${esc(b.name)}</strong><span>${esc(b.text)}</span></button>`).join('')}</div>
-    ${lab.best ? `<div class="lab-best panel"><small>Session best</small><b>${lab.best.earned.toLocaleString()} ${ico('cog')}</b><p>${lab.best.combo} peak combo${lab.best.objective ? ` · ${esc(lab.best.objective)}` : ''}</p></div>` : ''}
-    <p class="fine">Seed ${esc(lab.seed)} · Practice keeps your expedition, shards, unlocks and records untouched.</p>
-    <button class="btn btn-go big lab-start" data-act="lab-start">${ico('play')}<span>${lab.attempt > 0 ? 'Launch again' : 'Launch practice'}</span></button>
+    ${lab.best ? `<div class="lab-best panel"><small>${esc(t('Session best'))}</small><b>${lab.best.earned.toLocaleString('en-US')} ${ico('cog')}</b><p>${esc(t('{n} peak combo', { n: lab.best.combo }))}${lab.best.objective ? ` · ${esc(lab.best.objective)}` : ''}</p></div>` : ''}
+    <p class="fine">${esc(t('Seed {seed} · Practice keeps your expedition, shards, unlocks and records untouched.', { seed: lab.seed }))}</p>
+    <button class="btn btn-go big lab-start" data-act="lab-start">${ico('play')}<span>${esc(lab.attempt > 0 ? t('Launch again') : t('Launch practice'))}</span></button>
   </div></article>`
 }
 
 /** Only facts recorded by the simulation appear in this panel. */
 function dropReportHtml(report: DropReport): string {
-  return `<section class="drop-report panel" data-outcome="${esc(report.outcome)}" aria-label="Fall analysis"><div class="report-head">${ico('eye')}<div><small>Fall analysis</small><h3>${esc(report.title)}</h3></div></div><p class="report-detail">${esc(report.detail)}</p><div class="report-metrics"><div><small>Gears</small><b data-report="earned">${report.earned.toLocaleString()}</b></div><div><small>Time</small><b data-report="elapsed">${report.elapsed.toFixed(1)}s</b></div><div><small>Peak combo</small><b data-report="combo">${report.peakCombo}</b></div></div>${report.objective ? `<div class="report-objective ${report.objective.complete ? 'complete' : ''}"><span>${esc(report.objective.name)}</span><strong>${report.objective.progress} / ${report.objective.required} · ${report.objective.complete ? 'Complete' : 'Incomplete'}</strong></div>` : ''}<div class="report-cols"><section><h4>Shell damage</h4>${report.damage.length ? `<ol>${report.damage.map(d => `<li data-report="damage"><time>${d.time.toFixed(1)}s</time><span>${esc(d.cause)}</span><b>−${d.amount}</b></li>`).join('')}</ol>` : '<p class="empty" data-report="damage">No shell damage recorded.</p>'}</section><section><h4>Controls used</h4><ul>${report.resources.map(r => `<li data-report="resource"><span>${esc(r.label)}</span><strong>${r.used} used · ${r.remaining} left</strong></li>`).join('')}</ul></section></div><div class="report-advice">${ico('sparkle')}<p data-report="advice">${esc(report.advice)}</p></div></section>`
+  const fall = esc(t('Fall analysis'))
+  return `<section class="drop-report panel" data-outcome="${esc(report.outcome)}" aria-label="${fall}"><div class="report-head">${ico('eye')}<div><small>${fall}</small><h3>${esc(report.title)}</h3></div></div><p class="report-detail">${esc(report.detail)}</p><div class="report-metrics"><div><small>${esc(t('Gears'))}</small><b data-report="earned">${report.earned.toLocaleString('en-US')}</b></div><div><small>${esc(t('Time'))}</small><b data-report="elapsed">${esc(t('{s}s', { s: report.elapsed.toFixed(1) }))}</b></div><div><small>${esc(t('Peak combo'))}</small><b data-report="combo">${report.peakCombo}</b></div></div>${report.objective ? `<div class="report-objective ${report.objective.complete ? 'complete' : ''}"><span>${esc(report.objective.name)}</span><strong>${ratio(report.objective.progress, report.objective.required)} · ${esc(report.objective.complete ? t('Complete') : t('Incomplete'))}</strong></div>` : ''}<div class="report-cols"><section><h4>${esc(t('Shell damage'))}</h4>${report.damage.length ? `<ol>${report.damage.map(d => `<li data-report="damage"><time>${esc(t('{s}s', { s: d.time.toFixed(1) }))}</time><span>${esc(d.cause)}</span><b>−${d.amount}</b></li>`).join('')}</ol>` : `<p class="empty" data-report="damage">${esc(t('No shell damage recorded.'))}</p>`}</section><section><h4>${esc(t('Controls used'))}</h4><ul>${report.resources.map(r => `<li data-report="resource"><span>${esc(r.label)}</span><strong>${esc(t('{used} used · {left} left', { used: r.used, left: r.remaining }))}</strong></li>`).join('')}</ul></section></div><div class="report-advice">${ico('sparkle')}<p data-report="advice">${esc(report.advice)}</p></div></section>`
 }
 
 // ---------------------------------------------------------------------------
@@ -869,37 +887,38 @@ function stageHtml(stage: StageModel): string {
     case 'laboratory':
       return laboratoryHtml(stage.lab)
     case 'practice-result': {
-      const difference = stage.comparison == null ? 'First recorded attempt on this setup' : `${stage.comparison > 0 ? '+' : ''}${stage.comparison.toLocaleString()} gears versus your previous attempt`
-      return screen('practice-result', `Attempt ${stage.attempt}`, `<div class="practice-comparison panel"><span>Best this session</span><b>${stage.best.toLocaleString()} ${ico('cog')}</b><small>${esc(difference)}</small></div><div class="btn-row"><button class="btn btn-go big" data-act="lab-retry">${ico('refresh')}<span>Retry <kbd>Enter</kbd></span></button></div><div class="btn-row"><button class="btn" data-act="lab-configure">${ico('gear')}<span>Configure</span></button><button class="btn" data-act="lab-exit">${ico('back')}<span>Leave</span></button></div>${dropReportHtml(stage.report)}<p class="fine">Practice attempts stay in this session. Expedition progress, shards, unlocks, and records are preserved.</p>`, { kicker: 'Practice result' })
+      const difference = stage.comparison == null ? t('First recorded attempt on this setup') : t('{diff} gears versus your previous attempt', { diff: `${stage.comparison > 0 ? '+' : ''}${stage.comparison.toLocaleString('en-US')}` })
+      return screen('practice-result', esc(t('Attempt {n}', { n: stage.attempt })), `<div class="practice-comparison panel"><span>${esc(t('Best this session'))}</span><b>${stage.best.toLocaleString('en-US')} ${ico('cog')}</b><small>${esc(difference)}</small></div><div class="btn-row"><button class="btn btn-go big" data-act="lab-retry">${ico('refresh')}<span>${esc(t('Retry'))} <kbd>Enter</kbd></span></button></div><div class="btn-row"><button class="btn" data-act="lab-configure">${ico('gear')}<span>${esc(t('Configure'))}</span></button><button class="btn" data-act="lab-exit">${ico('back')}<span>${esc(t('Leave'))}</span></button></div>${dropReportHtml(stage.report)}<p class="fine">${esc(t('Practice attempts stay in this session. Expedition progress, shards, unlocks, and records are preserved.'))}</p>`, { kicker: t('Practice result') })
     }
     case 'help':
-      return screen('help-screen', 'How to play', `
+      return screen('help-screen', esc(t('How to play')), `
         <div class="howto">
-          <div class="howto-card t-cyan">${ico('down')}<h3>Aim & release</h3><p>Drag on the machine or use the arrows, then release. The dotted line shows your first contact. <span class="pointer-only">Enter releases · V inspects.</span></p></div>
-          <div class="howto-card t-pink">${ico('next')}<h3>Nudge the fall</h3><p>Nudge left or right a few times per machine. Flip the gate once. Your sphere has a trick too.<span class="pointer-only"> A / D · F · Space · Q</span></p></div>
-          <div class="howto-card t-gold">${ico('bolt')}<h3>Overdrive</h3><p>Hit five different pegs to charge it. Fire for a lift and 2× payouts for three seconds.<span class="pointer-only"> E</span></p></div>
-          <div class="howto-card t-green">${ico('star')}<h3>Build</h3><p>Pick relics and upgrades between machines. Matching tags awaken bonuses. Gold pegs raise the multiplier.</p></div>
-          <div class="howto-card t-red">${ico('heart')}<h3>Keep your shell</h3><p>Spikes and gutters crack it. Benches between acts repair it. Break the Grinder's five seals to win.</p></div>
-          <div class="howto-card t-violet">${ico('dust')}<h3>Grow forever</h3><p>Every run earns XP and stardust for the Star Chart. Quests, feats, Trials and endless circuits keep going.</p></div>
+          <div class="howto-card t-cyan">${ico('down')}<h3>${esc(t('Aim & release'))}</h3><p>${esc(t('Drag on the machine or use the arrows, then release. The dotted line shows your first contact.'))} <span class="pointer-only">${esc(t('Enter releases · V inspects.'))}</span></p></div>
+          <div class="howto-card t-pink">${ico('next')}<h3>${esc(t('Nudge the fall'))}</h3><p>${esc(t('Nudge left or right a few times per machine. Flip the gate once. Your sphere has a trick too.'))}<span class="pointer-only"> A / D · F · Space · Q</span></p></div>
+          <div class="howto-card t-gold">${ico('bolt')}<h3>${esc(t('Overdrive'))}</h3><p>${esc(t('Hit five different pegs to charge it. Fire for a lift and 2× payouts for three seconds.'))}<span class="pointer-only"> E</span></p></div>
+          <div class="howto-card t-green">${ico('star')}<h3>${esc(t('Build'))}</h3><p>${esc(t('Pick relics and upgrades between machines. Matching tags awaken bonuses. Gold pegs raise the multiplier.'))}</p></div>
+          <div class="howto-card t-red">${ico('heart')}<h3>${esc(t('Keep your shell'))}</h3><p>${esc(t("Spikes and gutters crack it. Benches between acts repair it. Break the Grinder's five seals to win."))}</p></div>
+          <div class="howto-card t-violet">${ico('dust')}<h3>${esc(t('Grow forever'))}</h3><p>${esc(t('Every run earns XP and stardust for the Star Chart. Quests, feats, Trials and endless circuits keep going.'))}</p></div>
         </div>
-        <details class="fold"><summary>Guardians, saves and fair play</summary><p>The Bellkeeper asks you to ring three bells; the Heartforge to alternate relays I and II. Both are optional, and one safe return before 75 seconds keeps progress. Expeditions save between machines; a reload replays the current drop. Daily constellations and shared links use pure rules so everyone plays the same machine.</p></details>
-        <div class="btn-row"><button class="btn btn-go big" data-act="back">${ico('play')}<span>Got it</span></button></div>
-        <div class="btn-row"><button class="btn" data-act="coach-enable">${ico('help')}<span>Show Workshop tips again</span></button></div>`, { back: 'back', kicker: 'Field guide' })
+        <details class="fold"><summary>${esc(t('Guardians, saves and fair play'))}</summary><p>${esc(t('The Bellkeeper asks you to ring three bells; the Heartforge to alternate relays I and II. Both are optional, and one safe return before 75 seconds keeps progress. Expeditions save between machines; a reload replays the current drop. Daily constellations and shared links use pure rules so everyone plays the same machine.'))}</p></details>
+        <div class="btn-row"><button class="btn btn-go big" data-act="back">${ico('play')}<span>${esc(t('Got it'))}</span></button></div>
+        <div class="btn-row"><button class="btn" data-act="coach-enable">${ico('help')}<span>${esc(t('Show Workshop tips again'))}</span></button></div>`, { back: 'back', kicker: t('Field guide') })
     case 'collection':
-      return screen('collection-screen', 'Archive', `<p class="fine">Pegs struck, all falls: ${stage.pegs.toLocaleString()}</p>${block('Spheres', stage.balls)}${block('Relics', stage.relics)}${block('Machine parts', stage.parts)}${block('Challenges', stage.challenges)}${stage.lore.length ? `<section class="block"><h3 class="section-h">Fragments</h3>${stage.lore.map(l => `<blockquote class="lore">${esc(l)}</blockquote>`).join('')}</section>` : ''}`, { back: 'back', kicker: 'Everything you have found' })
+      return screen('collection-screen', esc(t('Archive')), `<p class="fine">${esc(t('Pegs struck, all falls: {n}', { n: stage.pegs.toLocaleString('en-US') }))}</p>${block(t('Spheres'), stage.balls)}${block(t('Relics'), stage.relics)}${block(t('Machine parts'), stage.parts)}${block(t('Challenges'), stage.challenges)}${stage.lore.length ? `<section class="block"><h3 class="section-h">${esc(t('Fragments'))}</h3>${stage.lore.map(l => `<blockquote class="lore">${esc(l)}</blockquote>`).join('')}</section>` : ''}`, { back: 'back', kicker: t('Everything you have found') })
     case 'settings':
-      return screen('settings-screen', 'Settings', `
+      return screen('settings-screen', esc(t('Settings')), `
+        ${stage.langs?.length ? `<div class="seg-group lang-setting"><span>${esc(t('Language'))}</span><div class="seg">${stage.langs.map(l => `<button class="${stage.lang === l.id ? 'on' : ''}" data-act="lang:${esc(l.id)}" aria-pressed="${stage.lang === l.id}" lang="${esc(l.id)}">${esc(l.name)}</button>`).join('')}</div></div>` : ''}
         <div class="settings-list">
-          ${toggle('shake', 'Screen shake', stage.shake, 'bolt')}
-          ${toggle('particles', 'Particles', stage.particles, 'sparkle')}
-          ${toggle('flash', 'Flashes', stage.flash, 'star')}
-          ${toggle('large', 'Larger text', stage.large, 'book')}
-          ${toggle('haptics', stage.hapticsAvailable ? 'Vibration' : 'Vibration (supported phones)', !!stage.haptics, 'heart')}
+          ${toggle('shake', t('Screen shake'), stage.shake, 'bolt')}
+          ${toggle('particles', t('Particles'), stage.particles, 'sparkle')}
+          ${toggle('flash', t('Flashes'), stage.flash, 'star')}
+          ${toggle('large', t('Larger text'), stage.large, 'book')}
+          ${toggle('haptics', stage.hapticsAvailable ? t('Vibration') : t('Vibration (supported phones)'), !!stage.haptics, 'heart')}
         </div>
-        <label class="slider">${ico('sound')}<span>Sound</span><input type="range" min="0" max="1" step="0.05" data-volume value="${stage.volume}" /></label>
-        <div class="seg-group"><span>Graphics</span><div class="seg">${(['auto', 'high', 'saver'] as const).map(q => `<button class="${stage.quality === q ? 'on' : ''}" data-act="quality:${q}" aria-pressed="${stage.quality === q}">${q === 'auto' ? 'Auto' : q === 'high' ? 'Sharp' : 'Saver'}</button>`).join('')}</div><small>Auto lowers resolution when a device struggles. Saver also halves menu frame rate.</small></div>
-        <div class="seg-group speed-setting"><span>Fall speed</span><div class="seg">${[0.75, 1, 1.5, 2].map(speed => `<button class="${stage.speed === speed ? 'on' : ''}" data-act="speed:${speed}" aria-pressed="${stage.speed === speed}">${speed}×</button>`).join('')}</div><small>More time to react, or a quicker descent. Physics stays the same.</small></div>
-        <div class="btn-row"><button class="btn btn-go big" data-act="back">${ico('check')}<span>Done</span></button></div>`, { back: 'back' })
+        <label class="slider">${ico('sound')}<span>${esc(t('Sound'))}</span><input type="range" min="0" max="1" step="0.05" data-volume value="${stage.volume}" /></label>
+        <div class="seg-group"><span>${esc(t('Graphics'))}</span><div class="seg">${(['auto', 'high', 'saver'] as const).map(q => `<button class="${stage.quality === q ? 'on' : ''}" data-act="quality:${q}" aria-pressed="${stage.quality === q}">${esc(q === 'auto' ? t('Auto') : q === 'high' ? t('Sharp') : t('Saver'))}</button>`).join('')}</div><small>${esc(t('Auto lowers resolution when a device struggles. Saver also halves menu frame rate.'))}</small></div>
+        <div class="seg-group speed-setting"><span>${esc(t('Fall speed'))}</span><div class="seg">${[0.75, 1, 1.5, 2].map(speed => `<button class="${stage.speed === speed ? 'on' : ''}" data-act="speed:${speed}" aria-pressed="${stage.speed === speed}">${speed}×</button>`).join('')}</div><small>${esc(t('More time to react, or a quicker descent. Physics stays the same.'))}</small></div>
+        <div class="btn-row"><button class="btn btn-go big" data-act="back">${ico('check')}<span>${esc(t('Done'))}</span></button></div>`, { back: 'back' })
     case 'choices':
       return `<div class="decision draft">
           <div class="banner"><small>${esc(stage.kicker)}</small><h2>${esc(stage.title)}</h2></div>
@@ -909,24 +928,24 @@ function stageHtml(stage: StageModel): string {
         </div>`
     case 'shop':
       return `<div class="decision shop">
-          <div class="banner gold-banner">${ico('bag')}<div><small>The Counter</small><h2>Shop</h2></div>${wallet('gears', stage.gears, 'Gears')}</div>
+          <div class="banner gold-banner">${ico('bag')}<div><small>${esc(t('The Counter'))}</small><h2>${esc(t('Shop'))}</h2></div>${wallet('gears', stage.gears, t('Gears'))}</div>
           <p class="build">${esc(stage.build)}</p>
-          <div class="cards">${stage.cards.map(c => choiceHtml(c, 'buy')).join('') || '<p class="empty">Sold out.</p>'}</div>
+          <div class="cards">${stage.cards.map(c => choiceHtml(c, 'buy')).join('') || `<p class="empty">${esc(t('Sold out.'))}</p>`}</div>
           <div class="btn-row shop-actions">
-            <button class="btn" data-act="reroll" ${stage.canReroll ? '' : 'disabled'}>${ico('refresh')}<span>Reroll · ${stage.reroll || 'free'}</span></button>
-            <button class="btn" data-act="shop-repair" ${stage.canRepair ? '' : 'disabled'}>${ico('heart')}<span>Mend 1 · ${stage.repairCost}</span></button>
+            <button class="btn" data-act="reroll" ${stage.canReroll ? '' : 'disabled'}>${ico('refresh')}<span>${esc(t('Reroll · {cost}', { cost: stage.reroll || t('free') }))}</span></button>
+            <button class="btn" data-act="shop-repair" ${stage.canRepair ? '' : 'disabled'}>${ico('heart')}<span>${esc(t('Mend 1 · {cost}', { cost: stage.repairCost }))}</span></button>
           </div>
-          <button class="btn btn-go big" data-act="leave">${ico('next')}<span>Continue</span></button>
+          <button class="btn btn-go big" data-act="leave">${ico('next')}<span>${esc(t('Continue'))}</span></button>
         </div>`
     case 'fork':
-      return `<div class="decision fork-decision"><div class="banner"><small>Choose your path</small><h2>${esc(stage.title)}</h2></div><div class="cards fork-cards">${stage.options.map(o => `<button class="card fork ${o.risk}" data-act="fork:${o.index}" style="--i:${o.index}"><kbd class="num">${o.index + 1}</kbd><span class="fork-badge">${ico(o.risk === 'safe' ? 'shield' : 'flame')}</span><span class="risk ${o.risk}">${o.risk === 'safe' ? 'Safe' : 'Risky'}</span><h3>${esc(o.title)}</h3><p>${esc(o.detail)}</p><span class="offer-action">Go</span></button>`).join('')}</div></div>`
+      return `<div class="decision fork-decision"><div class="banner"><small>${esc(t('Choose your path'))}</small><h2>${esc(stage.title)}</h2></div><div class="cards fork-cards">${stage.options.map(o => `<button class="card fork ${o.risk}" data-act="fork:${o.index}" style="--i:${o.index}"><kbd class="num">${o.index + 1}</kbd><span class="fork-badge">${ico(o.risk === 'safe' ? 'shield' : 'flame')}</span><span class="risk ${o.risk}">${esc(o.risk === 'safe' ? t('Safe') : t('Risky'))}</span><h3>${esc(o.title)}</h3><p>${esc(o.detail)}</p><span class="offer-action">${esc(t('Go'))}</span></button>`).join('')}</div></div>`
     case 'repair':
-      return `<div class="decision repair"><div class="big-icon t-green">${ico('heart')}</div><div class="banner"><small>The Bench</small><h2>Rest & repair</h2></div><p class="lede">${esc(stage.text)}</p><button class="btn btn-go big" data-act="repair">${ico('wrench')}<span>${esc(stage.action)}</span></button></div>`
+      return `<div class="decision repair"><div class="big-icon t-green">${ico('heart')}</div><div class="banner"><small>${esc(t('The Bench'))}</small><h2>${esc(t('Rest & repair'))}</h2></div><p class="lede">${esc(stage.text)}</p><button class="btn btn-go big" data-act="repair">${ico('wrench')}<span>${esc(stage.action)}</span></button></div>`
     case 'bargain':
-      return `<div class="decision bargain"><div class="banner red-banner"><small>The Bargain</small><h2>Three bad ideas</h2></div><div class="cards">
-          <button class="card offer t-red" data-act="bargain:shell" style="--i:0" ${stage.canShell ? '' : 'disabled'}><kbd class="num">1</kbd>${gem('heart', 'red', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>Crack the shell</h3></span><p>Lose 1 shell. Get a random relic.</p></span><span class="offer-action">Risk it</span></button>
-          <button class="card offer t-orange" data-act="bargain:pay" style="--i:1" ${stage.canPay ? '' : 'disabled'}><kbd class="num">2</kbd>${gem('coin', 'orange', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>Pay 30 gears</h3></span><p>Get a random upgrade.</p></span><span class="offer-action">Pay</span></button>
-          <button class="card offer t-green" data-act="bargain:walk" style="--i:2"><kbd class="num">3</kbd>${gem('shell', 'green', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>Skim the tray</h3></span><p>Take 18 gears and walk away.</p></span><span class="offer-action">Safe</span></button>
+      return `<div class="decision bargain"><div class="banner red-banner"><small>${esc(t('The Bargain'))}</small><h2>${esc(t('Three bad ideas'))}</h2></div><div class="cards">
+          <button class="card offer t-red" data-act="bargain:shell" style="--i:0" ${stage.canShell ? '' : 'disabled'}><kbd class="num">1</kbd>${gem('heart', 'red', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>${esc(t('Crack the shell'))}</h3></span><p>${esc(t('Lose 1 shell. Get a random relic.'))}</p></span><span class="offer-action">${esc(t('Risk it'))}</span></button>
+          <button class="card offer t-orange" data-act="bargain:pay" style="--i:1" ${stage.canPay ? '' : 'disabled'}><kbd class="num">2</kbd>${gem('coin', 'orange', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>${esc(t('Pay 30 gears'))}</h3></span><p>${esc(t('Get a random upgrade.'))}</p></span><span class="offer-action">${esc(t('Pay'))}</span></button>
+          <button class="card offer t-green" data-act="bargain:walk" style="--i:2"><kbd class="num">3</kbd>${gem('shell', 'green', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>${esc(t('Skim the tray'))}</h3></span><p>${esc(t('Take 18 gears and walk away.'))}</p></span><span class="offer-action">${esc(t('Safe'))}</span></button>
         </div></div>`
     case 'resolve':
       return `<button class="resolve ${stage.tone}" data-act="skip">
@@ -934,55 +953,57 @@ function stageHtml(stage: StageModel): string {
           <b>${esc(stage.title)}</b>
           ${stage.sub ? `<span class="sub">${esc(stage.sub)}</span>` : ''}
           <strong class="earned">+<span data-count="${stage.earned}">0</span>${ico('cog')}</strong>
-          <em><span class="pointer-only">Click or <kbd>Enter</kbd></span><span class="touch-only">Tap</span> to continue</em>
+          <em><span class="pointer-only">${t('Click or {key} to continue', { key: '<kbd>Enter</kbd>' })}</span><span class="touch-only">${esc(t('Tap to continue'))}</span></em>
         </button>`
     case 'pause':
-      return `<div class="modal pause-plaque"><div class="big-icon t-blue">${ico('pause')}</div><h2>Paused</h2>${stage.practice ? '<small>Practice</small>' : ''}<div class="btn-col">
-          <button class="btn btn-go big" data-act="resume">${ico('play')}<span>Resume</span></button>
-          <button class="btn" data-act="journal">${ico('map')}<span>${stage.practice ? 'Practice journal' : 'Build & route'} <kbd>J</kbd></span></button>
-          <button class="btn" data-act="settings">${ico('gear')}<span>Settings</span></button>
-          ${stage.practice ? `<button class="btn" data-act="lab-retry">${ico('refresh')}<span>Restart machine</span></button><button class="btn" data-act="lab-configure">${ico('flask')}<span>Configure</span></button><button class="btn btn-danger" data-act="lab-exit">${ico('close')}<span>Leave practice</span></button>` : `${stage.canSave ? `<button class="btn" data-act="save-exit">${ico('back')}<span>Save &amp; go home</span></button>` : ''}<button class="btn btn-danger" data-act="abandon">${ico('close')}<span>Abandon run</span></button>`}
+      return `<div class="modal pause-plaque"><div class="big-icon t-blue">${ico('pause')}</div><h2>${esc(t('Paused'))}</h2>${stage.practice ? `<small>${esc(t('Practice'))}</small>` : ''}<div class="btn-col">
+          <button class="btn btn-go big" data-act="resume">${ico('play')}<span>${esc(t('Resume'))}</span></button>
+          <button class="btn" data-act="journal">${ico('map')}<span>${esc(stage.practice ? t('Practice journal') : t('Build & route'))} <kbd>J</kbd></span></button>
+          <button class="btn" data-act="settings">${ico('gear')}<span>${esc(t('Settings'))}</span></button>
+          ${stage.practice ? `<button class="btn" data-act="lab-retry">${ico('refresh')}<span>${esc(t('Restart machine'))}</span></button><button class="btn" data-act="lab-configure">${ico('flask')}<span>${esc(t('Configure'))}</span></button><button class="btn btn-danger" data-act="lab-exit">${ico('close')}<span>${esc(t('Leave practice'))}</span></button>` : `${stage.canSave ? `<button class="btn" data-act="save-exit">${ico('back')}<span>${esc(t('Save & go home'))}</span></button>` : ''}<button class="btn btn-danger" data-act="abandon">${ico('close')}<span>${esc(t('Abandon run'))}</span></button>`}
         </div></div>`
     case 'runend': {
       const s = stage.summary
-      const win = /falls/i.test(s.heading)
+      // The heading is model text and may be translated: test its English source.
+      const win = /falls/i.test(source(s.heading))
       return `<article class="screen end ${win ? 'won' : ''}"><div class="screen-body">
-          <div class="end-hero"><div class="big-icon ${win ? 't-gold' : 't-blue'}">${ico(win ? 'trophy' : 'flag')}</div><small>${s.mode === 'daily' ? 'Daily constellation' : 'Expedition'} · Trial ${s.ascension}</small><h2>${esc(win ? 'Victory!' : 'Run over')}</h2><p class="lede">${esc(s.line)}</p></div>
-          <div class="final"><span>Score</span><b data-count="${s.score}">0</b>${s.best ? '<em class="badge">New best!</em>' : ''}</div>
-          <div class="stats">${stat('Best multiplier', esc(s.mult), 'star', 'gold')}${stat('Best combo', String(s.combo), 'bolt', 'cyan')}${stat('Circuits', String(s.clears), 'trophy', 'violet')}${stat('Shards', `+${s.shards}`, 'shard', 'green')}</div>
+          <div class="end-hero"><div class="big-icon ${win ? 't-gold' : 't-blue'}">${ico(win ? 'trophy' : 'flag')}</div><small>${esc(s.mode === 'daily' ? t('Daily constellation') : t('Expedition'))} · ${esc(t('Trial {n}', { n: s.ascension }))}</small><h2>${esc(win ? t('Victory!') : t('Run over'))}</h2><p class="lede">${esc(s.line)}</p></div>
+          <div class="final"><span>${esc(t('Score'))}</span><b data-count="${s.score}">0</b>${s.best ? `<em class="badge">${esc(t('New best!'))}</em>` : ''}</div>
+          <div class="stats">${stat(t('Best multiplier'), esc(s.mult), 'star', 'gold')}${stat(t('Best combo'), String(s.combo), 'bolt', 'cyan')}${stat(t('Circuits'), String(s.clears), 'trophy', 'violet')}${stat(t('Shards'), `+${s.shards}`, 'shard', 'green')}</div>
           ${s.progress ? progressHtml(s.progress) : ''}
-          ${s.awakened.length ? `<p class="unlock">${ico('sparkle')}Unlocked: ${esc(s.awakened.join(', '))}</p>` : ''}
-          ${s.challenges.length ? `<p class="unlock">${ico('check')}Challenges: ${esc(s.challenges.join(', '))}</p>` : ''}
+          ${s.awakened.length ? `<p class="unlock">${ico('sparkle')}${esc(t('Unlocked: {list}', { list: list(s.awakened) }))}</p>` : ''}
+          ${s.challenges.length ? `<p class="unlock">${ico('check')}${esc(t('Challenges: {list}', { list: list(s.challenges) }))}</p>` : ''}
           <p class="tempt">${esc(s.temptation)}</p>
-          <button class="btn btn-go big" data-act="again">${ico('play')}<span>Play again <kbd>Enter</kbd></span></button>
-          <div class="btn-row"><button class="btn" data-act="retry">${ico('refresh')}<span>Same seed</span></button><button class="btn" data-act="hub">${ico('back')}<span>Home</span></button></div>
-          <div class="btn-row small">${s.canStudy ? `<button class="btn btn-violet" data-act="study">${ico('shard')}<span>${esc(s.studyLabel)}</span></button>` : ''}<button class="btn" data-act="copy-challenge">${ico('share')}<span>Challenge</span></button><button class="btn" data-act="copy-result">${ico('list')}<span>Copy result</span></button></div>
-          <p class="fine">Seed ${esc(s.seed)} · ${s.commissions}/3 commissions · ${esc(s.depth)}</p>
-          ${s.debrief ? `<button class="btn practice-last" data-act="practice-last">${ico('flask')}<span>Practice the last machine</span></button>${dropReportHtml(s.debrief)}` : ''}
+          <button class="btn btn-go big" data-act="again">${ico('play')}<span>${esc(t('Play again'))} <kbd>Enter</kbd></span></button>
+          <div class="btn-row"><button class="btn" data-act="retry">${ico('refresh')}<span>${esc(t('Same seed'))}</span></button><button class="btn" data-act="hub">${ico('back')}<span>${esc(t('Home'))}</span></button></div>
+          <div class="btn-row small">${s.canStudy ? `<button class="btn btn-violet" data-act="study">${ico('shard')}<span>${esc(s.studyLabel)}</span></button>` : ''}<button class="btn" data-act="copy-challenge">${ico('share')}<span>${esc(t('Challenge'))}</span></button><button class="btn" data-act="copy-result">${ico('list')}<span>${esc(t('Copy result'))}</span></button></div>
+          <p class="fine">${esc(t('Seed {seed} · {n}/3 commissions · {depth}', { seed: s.seed, n: s.commissions, depth: s.depth }))}</p>
+          ${s.debrief ? `<button class="btn practice-last" data-act="practice-last">${ico('flask')}<span>${esc(t('Practice the last machine'))}</span></button>${dropReportHtml(s.debrief)}` : ''}
         </div></article>`
     }
     case 'reveal':
-      return `<div class="modal reveal">${gem(artifactKind(stage.name, stage.tags), toneOf(stage.tags), 'huge reveal-art')}<small>New schematic</small><h2>${esc(stage.name)}</h2>${tagChips(stage.tags)}<p>${esc(stage.text)}</p><button class="btn btn-go big" data-act="close-reveal">${ico('check')}<span>Awesome</span></button></div>`
+      return `<div class="modal reveal">${gem(artifactKind(stage.name, stage.tags), toneOf(stage.tags), 'huge reveal-art')}<small>${esc(t('New schematic'))}</small><h2>${esc(stage.name)}</h2>${tagChips(stage.tags)}<p>${esc(stage.text)}</p><button class="btn btn-go big" data-act="close-reveal">${ico('check')}<span>${esc(t('Awesome'))}</span></button></div>`
     case 'event':
-      return `<div class="decision event-decision"><div class="big-icon t-violet">${ico('eye')}</div><div class="banner"><small>A voice in the machine</small><h2>${esc(stage.title)}</h2></div><p class="lede">${esc(stage.story)}</p><div class="cards">${stage.cards.map(c => choiceHtml(c, 'event')).join('')}</div></div>`
+      return `<div class="decision event-decision"><div class="big-icon t-violet">${ico('eye')}</div><div class="banner"><small>${esc(t('A voice in the machine'))}</small><h2>${esc(stage.title)}</h2></div><p class="lede">${esc(stage.story)}</p><div class="cards">${stage.cards.map(c => choiceHtml(c, 'event')).join('')}</div></div>`
     case 'victory':
-      return `<div class="modal victory"><div class="big-icon t-gold pulse">${ico('trophy')}</div><small>Circuit ${stage.circuit} cleared</small><h2>The Grinder falls!</h2><p class="lede">${stage.score.toLocaleString()} score · your build survives</p><p class="build">${esc(stage.build)}</p>${stage.bounty ? `<p class="victory-bounty">${ico('dust')}First clear of circuit ${stage.circuit + 1}: +${stage.bounty}</p>` : ''}<div class="btn-col"><button class="btn btn-go big" data-act="bank">${ico('trophy')}<span>Bank the victory</span></button><button class="btn btn-danger big" data-act="loop">${ico('flame')}<span>Go deeper · circuit ${stage.circuit + 1}</span></button></div><p class="fine">Next circuit: ${esc(stage.pressure ?? 'more anomalies, richer payouts, dearer shops')}. Full repair and a new relic. Cleared circuits still count if the next one breaks you.</p></div>`
+      return `<div class="modal victory"><div class="big-icon t-gold pulse">${ico('trophy')}</div><small>${esc(t('Circuit {n} cleared', { n: stage.circuit }))}</small><h2>${esc(t('The Grinder falls!'))}</h2><p class="lede">${esc(t('{score} score · your build survives', { score: stage.score.toLocaleString('en-US') }))}</p><p class="build">${esc(stage.build)}</p>${stage.bounty ? `<p class="victory-bounty">${ico('dust')}${esc(t('First clear of circuit {n}: +{bounty}', { n: stage.circuit + 1, bounty: stage.bounty }))}</p>` : ''}<div class="btn-col"><button class="btn btn-go big" data-act="bank">${ico('trophy')}<span>${esc(t('Bank the victory'))}</span></button><button class="btn btn-danger big" data-act="loop">${ico('flame')}<span>${esc(t('Go deeper · circuit {n}', { n: stage.circuit + 1 }))}</span></button></div><p class="fine">${esc(t('Next circuit: {pressure}. Full repair and a new relic. Cleared circuits still count if the next one breaks you.', { pressure: stage.pressure ?? t('more anomalies, richer payouts, dearer shops') }))}</p></div>`
     case 'history':
-      return screen('history-screen', 'Logbook', stage.records.length ? `<ol class="run-log">${stage.records.map(r => `<li class="panel"><div class="log-main"><small>${esc(r.mode)} · Trial ${r.trial} · ${esc(r.date)}</small><h3>${esc(r.sphere)}</h3><p>${r.drops} drops · ${r.clears} cleared · ${esc(r.seed)}</p>${r.build ? `<p class="fine">${esc(r.build)}</p>` : ''}</div><b class="log-score">${compact(r.score)}</b><div class="btn-row small"><button class="btn" data-act="replay:${r.index}">${ico('refresh')}<span>Replay</span></button><button class="btn" data-act="share:${r.index}">${ico('share')}<span>Share</span></button></div></li>`).join('')}</ol>` : '<div class="empty-state">' + ico('list') + '<p>No runs yet. Your first story is one drop away.</p></div>', { back: 'back', kicker: 'Your last 20 expeditions' })
+      return screen('history-screen', esc(t('Logbook')), stage.records.length ? `<ol class="run-log">${stage.records.map(r => `<li class="panel"><div class="log-main"><small>${esc(r.mode)} · ${esc(t('Trial {n}', { n: r.trial }))} · ${esc(r.date)}</small><h3>${esc(r.sphere)}</h3><p>${esc(t('{drops} drops · {clears} cleared · {seed}', { drops: r.drops, clears: r.clears, seed: r.seed }))}</p>${r.build ? `<p class="fine">${esc(r.build)}</p>` : ''}</div><b class="log-score">${compact(r.score)}</b><div class="btn-row small"><button class="btn" data-act="replay:${r.index}">${ico('refresh')}<span>${esc(t('Replay'))}</span></button><button class="btn" data-act="share:${r.index}">${ico('share')}<span>${esc(t('Share'))}</span></button></div></li>`).join('')}</ol>` : `<div class="empty-state">${ico('list')}<p>${esc(t('No runs yet. Your first story is one drop away.'))}</p></div>`, { back: 'back', kicker: t('Your last 20 expeditions') })
     case 'journal':
       return journalHtml(stage)
   }
 }
 
 function journalHtml(stage: Extract<StageModel, { kind: 'journal' }>): string {
-  const commissions = stage.practice ? '<p class="fine">Practice · this fall earns no expedition rewards or progression.</p>' : `<h3 class="section-h">Commissions</h3><div class="commissions">${stage.commissions.map(c => `<div class="commission panel ${c.done ? 'complete' : ''}"><span class="quest-check" aria-hidden="true">${c.done ? '✓' : ''}</span><div><b>${esc(c.name)}</b><p>${esc(c.text)}</p><span class="bar"><i style="width:${(Math.min(1, c.value / Math.max(1, c.target)) * 100).toFixed(1)}%"></i></span><small>${Math.min(c.target, c.value)}/${c.target}${c.done ? ' · Paid' : ''}</small></div></div>`).join('')}</div>`
-  const route = stage.practice ? '' : `<div class="route-heading"><h3 class="section-h">Route</h3><small class="route-legend"><i class="l-current"></i>Here <i class="l-visited"></i>Visited <i class="l-future"></i>Ahead</small></div><div class="route-map">${[1, 2, 3].map(act => routeAct(stage.route, act)).join('')}</div>`
-  return `<article class="screen journal"><header class="screen-head"><button class="round-btn back" data-act="close-journal" aria-label="Close journal">${ico('close')}</button><div class="screen-title"><small>${esc(stage.stats)}</small><h2>${esc(stage.title)}</h2></div><span class="head-spacer"></span></header><div class="screen-body">${stage.encounter ? encounterBriefing(stage.encounter, stage.practice) : ''}${commissions}${block('Relics', stage.relics)}${block('Upgrades', stage.upgrades)}${stage.synergies.length ? block('Resonances', stage.synergies) : ''}${route}<button class="btn btn-go big" data-act="close-journal">${ico('play')}<span>Back to ${stage.practice ? 'practice' : 'the run'}</span></button>${stage.canSave ? `<button class="btn" data-act="save-exit">${ico('back')}<span>Save &amp; go home</span></button>` : ''}</div></article>`
+  const commissions = stage.practice ? `<p class="fine">${esc(t('Practice · this fall earns no expedition rewards or progression.'))}</p>` : `<h3 class="section-h">${esc(t('Commissions'))}</h3><div class="commissions">${stage.commissions.map(c => `<div class="commission panel ${c.done ? 'complete' : ''}"><span class="quest-check" aria-hidden="true">${c.done ? '✓' : ''}</span><div><b>${esc(c.name)}</b><p>${esc(c.text)}</p><span class="bar"><i style="width:${(Math.min(1, c.value / Math.max(1, c.target)) * 100).toFixed(1)}%"></i></span><small>${Math.min(c.target, c.value)}/${c.target}${c.done ? ` · ${esc(t('Paid'))}` : ''}</small></div></div>`).join('')}</div>`
+  const route = stage.practice ? '' : `<div class="route-heading"><h3 class="section-h">${esc(t('Route'))}</h3><small class="route-legend"><i class="l-current"></i>${esc(t('Here'))} <i class="l-visited"></i>${esc(t('Visited'))} <i class="l-future"></i>${esc(t('Ahead'))}</small></div><div class="route-map">${[1, 2, 3].map(act => routeAct(stage.route, act)).join('')}</div>`
+  return `<article class="screen journal"><header class="screen-head"><button class="round-btn back" data-act="close-journal" aria-label="${esc(t('Close journal'))}">${ico('close')}</button><div class="screen-title"><small>${esc(stage.stats)}</small><h2>${esc(stage.title)}</h2></div><span class="head-spacer"></span></header><div class="screen-body">${stage.encounter ? encounterBriefing(stage.encounter, stage.practice) : ''}${commissions}${block(t('Relics'), stage.relics)}${block(t('Upgrades'), stage.upgrades)}${stage.synergies.length ? block(t('Resonances'), stage.synergies) : ''}${route}<button class="btn btn-go big" data-act="close-journal">${ico('play')}<span>${esc(stage.practice ? t('Back to practice') : t('Back to the run'))}</span></button>${stage.canSave ? `<button class="btn" data-act="save-exit">${ico('back')}<span>${esc(t('Save & go home'))}</span></button>` : ''}</div></article>`
 }
 
 function routeAct(all: RouteItem[], act: number): string {
   const nodes = all.filter(n => n.act === act)
   const ids = new Set(nodes.map(n => n.id))
+  // Fallback when ids are absent: `next` and `title` both come from the model in the same language.
   const edges = (n: RouteItem) => (n.nextIds ?? nodes.filter(v => n.next.split(' / ').includes(v.title)).map(v => v.id)).filter(id => ids.has(id))
   const ranks = new Map(nodes.map(n => [n.id, 0]))
   for (let pass = 0; pass < nodes.length; pass++) for (const n of nodes) for (const next of edges(n)) ranks.set(next, Math.max(ranks.get(next) ?? 0, (ranks.get(n.id) ?? 0) + 1))
@@ -995,8 +1016,16 @@ function routeAct(all: RouteItem[], act: number): string {
     const from = positions.get(n.id)!, to = positions.get(id)!, target = nodes.find(v => v.id === id)!
     return `<path class="${n.status === 'visited' && ['visited', 'current'].includes(target.status) ? 'traversed' : ''}" d="M${from.x} ${from.y + 12}C${from.x} ${from.y + 50},${to.x} ${to.y - 36},${to.x} ${to.y - 12}"/>`
   })).join('')
-  const iconFor = (n: RouteItem) => n.kind.startsWith('Machine') || n.kind.startsWith('Guardian') ? 'down' : n.kind === 'boss' ? 'skull' : n.kind === 'fork' ? 'map' : n.kind === 'shop' ? 'bag' : n.kind === 'repair' ? 'heart' : 'eye'
-  return `<section class="route-act panel"><h4>Act ${['I', 'II', 'III'][act - 1]} · ${['The Brass Garden', 'The Ember Foundry', 'The Astral Engine'][act - 1]}</h4><div class="constellation-chart" style="height:${height}px"><svg viewBox="0 0 240 ${height}" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${nodes.map(n => { const p = positions.get(n.id)!; return `<details class="route-node ${n.status} ${p.count > 1 ? 'branch-node' : ''}" style="left:${p.x / 2.4}%;top:${p.y}px"><summary><i class="route-node-icon">${ico(iconFor(n))}</i><b>${esc(n.title)}</b><span>${n.status === 'current' ? 'You are here' : esc(n.kind)}</span></summary><div class="route-inspection"><span>${n.status === 'visited' ? 'Visited' : n.status === 'alternative' ? 'Unchosen path' : n.status === 'current' ? 'Current' : 'Ahead'} · ${esc(n.kind)}</span>${n.detail ? `<p>${esc(n.detail)}</p>` : ''}${n.next ? `<small>Next: ${esc(n.next)}</small>` : ''}</div></details>` }).join('')}</div></section>`
+  // Kinds may arrive translated (including filled templates like 'Machine · {reward}'): match the
+  // English source first, then the translated 'Machine' / 'Guardian' prefixes.
+  const iconFor = (n: RouteItem) => {
+    const kind = source(n.kind).toLowerCase()
+    if (kind.startsWith('machine') || kind.startsWith('guardian') || n.kind.startsWith(t('Machine')) || n.kind.startsWith(t('Guardian'))) return 'down'
+    return kind === 'boss' ? 'skull' : kind === 'fork' ? 'map' : kind === 'shop' ? 'bag' : kind === 'repair' ? 'heart' : 'eye'
+  }
+  const actTitle = [t('Act I'), t('Act II'), t('Act III')][act - 1]
+  const actName = [t('The Brass Garden'), t('The Ember Foundry'), t('The Astral Engine')][act - 1]
+  return `<section class="route-act panel"><h4>${esc(actTitle)} · ${esc(actName)}</h4><div class="constellation-chart" style="height:${height}px"><svg viewBox="0 0 240 ${height}" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${nodes.map(n => { const p = positions.get(n.id)!; return `<details class="route-node ${n.status} ${p.count > 1 ? 'branch-node' : ''}" style="left:${p.x / 2.4}%;top:${p.y}px"><summary><i class="route-node-icon">${ico(iconFor(n))}</i><b>${esc(n.title)}</b><span>${esc(n.status === 'current' ? t('You are here') : n.kind)}</span></summary><div class="route-inspection"><span>${esc(n.status === 'visited' ? t('Visited') : n.status === 'alternative' ? t('Unchosen path') : n.status === 'current' ? t('Current') : t('Ahead'))} · ${esc(n.kind)}</span>${n.detail ? `<p>${esc(n.detail)}</p>` : ''}${n.next ? `<small>${esc(t('Next: {next}', { next: n.next }))}</small>` : ''}</div></details>` }).join('')}</div></section>`
 }
 
 // ---------------------------------------------------------------------------
@@ -1005,7 +1034,7 @@ function routeAct(all: RouteItem[], act: number): string {
 function rankBadge(meta: MetaModel): string {
   const r = 19
   const c = 2 * Math.PI * r
-  return `<button class="rank-badge" data-act="quests" aria-label="Rank ${meta.level}, ${esc(meta.title)}. ${meta.xp} of ${meta.xpNext} XP. Open quests and feats."><span class="rank-ring"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="${r}" class="rank-track"/><circle cx="24" cy="24" r="${r}" class="rank-fill" stroke-dasharray="${(c * meta.xpT).toFixed(1)} ${c.toFixed(1)}"/></svg><b>${meta.level}</b></span><span class="rank-copy"><strong>${esc(meta.title)}</strong><i><em style="width:${(meta.xpT * 100).toFixed(1)}%"></em></i></span></button>`
+  return `<button class="rank-badge" data-act="quests" aria-label="${esc(t('Rank {level}, {title}. {xp} of {next} XP. Open quests and feats.', { level: meta.level, title: meta.title, xp: meta.xp, next: meta.xpNext }))}"><span class="rank-ring"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="${r}" class="rank-track"/><circle cx="24" cy="24" r="${r}" class="rank-fill" stroke-dasharray="${(c * meta.xpT).toFixed(1)} ${c.toFixed(1)}"/></svg><b>${meta.level}</b></span><span class="rank-copy"><strong>${esc(meta.title)}</strong><i><em style="width:${(meta.xpT * 100).toFixed(1)}%"></em></i></span></button>`
 }
 
 function hubHtml(stage: Extract<StageModel, { kind: 'hub' }>): string {
@@ -1020,84 +1049,87 @@ function hubHtml(stage: Extract<StageModel, { kind: 'hub' }>): string {
   return `<div class="home">
     <header class="home-bar">
       ${meta ? rankBadge(meta) : '<span></span>'}
-      <div class="wallet">${wallet('dust', meta?.stardust ?? 0, 'Stardust · spend on the Star Chart')}${wallet('shard', stage.shards, 'Shards · research new relics')}</div>
-      <button class="round-btn" data-act="settings" aria-label="Settings">${ico('gear')}</button>
+      <div class="wallet">${wallet('dust', meta?.stardust ?? 0, t('Stardust · spend on the Star Chart'))}${wallet('shard', stage.shards, t('Shards · research new relics'))}</div>
+      <button class="round-btn" data-act="settings" aria-label="${esc(t('Settings'))}">${ico('gear')}</button>
     </header>
     <section class="home-hero">
       <h1 class="logo">PLUMB<span aria-hidden="true">!</span></h1>
-      <p class="tagline">Cosmic pachinko roguelite</p>
+      <p class="tagline">${esc(t('Cosmic pachinko roguelite'))}</p>
     </section>
-    <section class="home-sphere" aria-label="Choose a sphere">
+    <section class="home-sphere" aria-label="${esc(t('Choose a sphere'))}">
       <div class="sphere-stage">
-        ${prev ? `<button class="round-btn arrow" data-act="ball:${prev.id}" aria-label="Previous sphere: ${esc(prev.name)}">${ico('back')}</button>` : '<span class="arrow-spacer"></span>'}
+        ${prev ? `<button class="round-btn arrow" data-act="ball:${prev.id}" aria-label="${esc(t('Previous sphere: {name}', { name: prev.name }))}">${ico('back')}</button>` : '<span class="arrow-spacer"></span>'}
         <div class="hero-orb-wrap" style="--oa:${selected.colors[0]};--ob:${selected.colors[1]};--oc:${selected.colors[2]}"><span class="orb-glow"></span><span class="orb-ring"></span>${orb(selected.colors, 'hero-orb')}<span class="orb-shadow"></span></div>
-        ${next ? `<button class="round-btn arrow" data-act="ball:${next.id}" aria-label="Next sphere: ${esc(next.name)}">${ico('next')}</button>` : '<span class="arrow-spacer"></span>'}
+        ${next ? `<button class="round-btn arrow" data-act="ball:${next.id}" aria-label="${esc(t('Next sphere: {name}', { name: next.name }))}">${ico('next')}</button>` : '<span class="arrow-spacer"></span>'}
       </div>
-      <div class="sphere-name"><h3>${esc(selected.name)}</h3>${tagChips(selected.tags)}<p>${esc(selected.tagline)}</p>${meta ? `<span class="mastery"><i><em style="width:${(meta.sphereT * 100).toFixed(1)}%"></em></i><b>Mastery ${meta.sphereLevel}</b>${meta.deepest ? `<b class="depth">Depth ${meta.deepest}</b>` : ''}</span>` : ''}</div>
+      <div class="sphere-name"><h3>${esc(selected.name)}</h3>${tagChips(selected.tags)}<p>${esc(selected.tagline)}</p>${meta ? `<span class="mastery"><i><em style="width:${(meta.sphereT * 100).toFixed(1)}%"></em></i><b>${esc(t('Mastery {n}', { n: meta.sphereLevel }))}</b>${meta.deepest ? `<b class="depth">${esc(t('Depth {n}', { n: meta.deepest }))}</b>` : ''}</span>` : ''}</div>
       <div class="sphere-dots">${stage.balls.map((b, i) => b.locked
         ? `<span class="sphere-pick locked" title="${esc(b.reason)}" style="--i:${i}">${orb(b.colors)}${ico('lock', 'lock')}<small>${esc(b.name)}</small></span>`
         : `<button class="sphere-pick ${b.selected ? 'selected' : ''}" data-act="ball:${b.id}" aria-pressed="${b.selected}" aria-label="${esc(b.name)}" style="--i:${i}">${orb(b.colors)}<small>${esc(b.name)}</small></button>`).join('')}</div>
       ${stage.balls.some(b => b.locked) ? `<p class="unlock-hint">${ico('lock')}${esc(stage.balls.find(b => b.locked)!.name)}: ${esc(stage.balls.find(b => b.locked)!.reason)}</p>` : ''}
-      ${finishes.length ? `<div class="finish-row" aria-label="Sphere finish">${finishes.map(f => f.unlocked
+      ${finishes.length ? `<div class="finish-row" aria-label="${esc(t('Sphere finish'))}">${finishes.map(f => f.unlocked
         ? `<button class="finish ${f.selected ? 'selected' : ''}" data-act="finish:${esc(f.id)}" aria-pressed="${f.selected}" title="${esc(f.name)}" style="--oa:${f.accent};--ob:${f.color};--oc:${f.core}"><i></i></button>`
-        : `<span class="finish locked" title="${esc(f.name)} · mastery ${f.level}" style="--oa:${f.accent};--ob:${f.color};--oc:${f.core}"><i></i><small>${f.level}</small></span>`).join('')}</div>${nextFinish ? `<p class="finish-hint">Next finish at mastery ${nextFinish.level}</p>` : ''}` : ''}
+        : `<span class="finish locked" title="${esc(t('{name} · mastery {n}', { name: f.name, n: f.level }))}" style="--oa:${f.accent};--ob:${f.color};--oc:${f.core}"><i></i><small>${f.level}</small></span>`).join('')}</div>${nextFinish ? `<p class="finish-hint">${esc(t('Next finish at mastery {n}', { n: nextFinish.level }))}</p>` : ''}` : ''}
     </section>
     <section class="home-play">
-      <div class="trial-select"><button class="round-btn small" data-act="trial-down" aria-label="Lower trial" ${stage.trial <= 0 ? 'disabled' : ''}>${ico('back')}</button><div class="trial-copy-wrap"><b>Trial ${stage.trial}<small>/${stage.maxTrial}</small></b><span class="trial-copy">${esc(stage.trialText)}</span></div><button class="round-btn small" data-act="trial-up" aria-label="Raise trial" ${stage.trial >= stage.maxTrial ? 'disabled' : ''}>${ico('next')}</button></div>
-      ${stage.legacy ? '<p class="legacy-route">Classic route · relay guardians disabled</p>' : ''}
-      ${stage.resume ? `<button class="btn btn-go play-btn" data-act="continue-run">${ico('play')}<span><b>Continue</b><small>Your run is waiting</small></span><kbd>Enter</kbd></button><button class="btn play-alt ${stage.confirm === 'start' ? 'btn-danger' : ''}" data-act="start">${ico('refresh')}<span>${stage.confirm === 'start' ? 'Tap again · replace run' : 'New run'}</span></button>` : `<button class="btn btn-go play-btn" data-act="start">${ico('play')}<span><b>${stage.shared ? 'Play challenge' : 'Play'}</b><small>${stage.shared ? 'Shared seed and sphere' : meta && meta.chartOn && meta.chartLevels > 0 ? 'Star Chart active' : 'Pick a relic and drop'}</small></span><kbd>Enter</kbd></button>`}
+      <div class="trial-select"><button class="round-btn small" data-act="trial-down" aria-label="${esc(t('Lower trial'))}" ${stage.trial <= 0 ? 'disabled' : ''}>${ico('back')}</button><div class="trial-copy-wrap"><b>${esc(t('Trial {n}', { n: stage.trial }))}<small>/${stage.maxTrial}</small></b><span class="trial-copy">${esc(stage.trialText)}</span></div><button class="round-btn small" data-act="trial-up" aria-label="${esc(t('Raise trial'))}" ${stage.trial >= stage.maxTrial ? 'disabled' : ''}>${ico('next')}</button></div>
+      ${stage.legacy ? `<p class="legacy-route">${esc(t('Classic route · relay guardians disabled'))}</p>` : ''}
+      ${stage.resume ? `<button class="btn btn-go play-btn" data-act="continue-run">${ico('play')}<span><b>${esc(t('Continue'))}</b><small>${esc(t('Your run is waiting'))}</small></span><kbd>Enter</kbd></button><button class="btn play-alt ${stage.confirm === 'start' ? 'btn-danger' : ''}" data-act="start">${ico('refresh')}<span>${esc(stage.confirm === 'start' ? t('Tap again · replace run') : t('New run'))}</span></button>` : `<button class="btn btn-go play-btn" data-act="start">${ico('play')}<span><b>${esc(stage.shared ? t('Play challenge') : t('Play'))}</b><small>${esc(stage.shared ? t('Shared seed and sphere') : meta && meta.chartOn && meta.chartLevels > 0 ? t('Star Chart active') : t('Pick a relic and drop'))}</small></span><kbd>Enter</kbd></button>`}
     </section>
     <section class="home-tiles">
-      <button class="tile t-gold" data-act="daily">${ico('calendar')}<b>Daily</b><small>${stage.confirm === 'daily' ? 'Tap again · replace run' : stage.dailyBest ? `Best ${compact(stage.dailyBest)}` : esc(stage.dailySphere)}</small></button>
-      <button class="tile t-cyan" data-act="quests">${ico('check')}<b>Quests</b><small>${meta ? `${meta.questsDone}/${meta.questsTotal}` : 'Goals'}</small>${meta && meta.questsDone < meta.questsTotal ? `<em class="badge-dot">${meta.questsTotal - meta.questsDone}</em>` : ''}</button>
-      <button class="tile t-violet" data-act="stars">${ico('star')}<b>Star Chart</b><small>${meta ? `${meta.chartLevels} upgrade${meta.chartLevels === 1 ? '' : 's'}` : 'Upgrades'}</small></button>
-      <button class="tile t-orange" data-act="laboratory">${ico('flask')}<b>Practice</b><small>Any machine</small></button>
+      <button class="tile t-gold" data-act="daily">${ico('calendar')}<b>${esc(t('Daily'))}</b><small>${esc(stage.confirm === 'daily' ? t('Tap again · replace run') : stage.dailyBest ? t('Best {score}', { score: compact(stage.dailyBest) }) : stage.dailySphere)}</small></button>
+      <button class="tile t-cyan" data-act="quests">${ico('check')}<b>${esc(t('Quests'))}</b><small>${meta ? `${meta.questsDone}/${meta.questsTotal}` : esc(t('Goals'))}</small>${meta && meta.questsDone < meta.questsTotal ? `<em class="badge-dot">${meta.questsTotal - meta.questsDone}</em>` : ''}</button>
+      <button class="tile t-violet" data-act="stars">${ico('star')}<b>${esc(t('Star Chart'))}</b><small>${esc(meta ? t(meta.chartLevels === 1 ? '{n} upgrade' : '{n} upgrades', { n: meta.chartLevels }) : t('Upgrades'))}</small></button>
+      <button class="tile t-orange" data-act="laboratory">${ico('flask')}<b>${esc(t('Practice'))}</b><small>${esc(t('Any machine'))}</small></button>
     </section>
-    <details class="home-options" ${stage.seed || stage.canStudy ? 'open' : ''}><summary>${ico('shard')}<span>Research & seed</span>${stage.canStudy ? '<em class="badge-dot">!</em>' : ''}</summary>
+    <details class="home-options" ${stage.seed || stage.canStudy ? 'open' : ''}><summary>${ico('shard')}<span>${esc(t('Research & seed'))}</span>${stage.canStudy ? '<em class="badge-dot">!</em>' : ''}</summary>
       <button class="btn ${stage.canStudy ? 'btn-violet' : ''} study" data-act="study" ${stage.canStudy ? '' : 'disabled'}>${ico('shard')}<span>${esc(stage.study)}</span></button>
-      <div class="seed-row"><label class="seed"><span>Seed</span><input data-seed value="${esc(stage.seed)}" maxlength="12" spellcheck="false" placeholder="Random" aria-label="Run seed" /></label><button class="round-btn" data-act="random-seed" aria-label="Randomize seed" title="Randomize seed">${ico('refresh')}</button></div>
-      <p class="fine">Best ${stage.best.toLocaleString()} · ${stage.runs} runs</p>
+      <div class="seed-row"><label class="seed"><span>${esc(t('Seed'))}</span><input data-seed value="${esc(stage.seed)}" maxlength="12" spellcheck="false" placeholder="${esc(t('Random'))}" aria-label="${esc(t('Run seed'))}" /></label><button class="round-btn" data-act="random-seed" aria-label="${esc(t('Randomize seed'))}" title="${esc(t('Randomize seed'))}">${ico('refresh')}</button></div>
+      <p class="fine">${esc(t('Best {score} · {runs} runs', { score: stage.best.toLocaleString('en-US'), runs: stage.runs }))}</p>
     </details>
-    <nav class="home-nav" aria-label="Main menu"><button data-act="help">${ico('help')}<span>How to play</span></button><button data-act="collection">${ico('book')}<span>Archive</span></button><button data-act="history">${ico('list')}<span>Logbook</span></button><button data-act="settings">${ico('gear')}<span>Settings</span></button></nav>
+    <nav class="home-nav" aria-label="${esc(t('Main menu'))}"><button data-act="help">${ico('help')}<span>${esc(t('How to play'))}</span></button><button data-act="collection">${ico('book')}<span>${esc(t('Archive'))}</span></button><button data-act="history">${ico('list')}<span>${esc(t('Logbook'))}</span></button><button data-act="settings">${ico('gear')}<span>${esc(t('Settings'))}</span></button></nav>
   </div>`
 }
 
 function starsHtml(stage: Extract<StageModel, { kind: 'stars' }>): string {
-  return screen('star-chart', 'Star Chart', `
-    <button class="chart-toggle ${stage.on ? 'on' : ''}" data-act="chart-toggle" aria-pressed="${stage.on}"><span><b>${stage.on ? 'Upgrades active' : 'Purist mode'}</b><small>${stage.on ? 'Turn off for pure runs and +25% stardust' : 'Upgrades ignored · +25% stardust'}</small></span><i class="sw"></i></button>
-    <p class="fine">Dailies and shared challenges always use pure rules.</p>
-    <div class="star-grid">${stage.nodes.map((n, i) => `<div class="star-node ${n.maxed ? 'maxed' : ''} ${n.endless ? 'endless' : ''} ${n.level > 0 ? 'owned' : ''}" style="--i:${i}"><span class="star-glyph" aria-hidden="true">${esc(n.glyph)}</span><div class="star-copy"><h3>${esc(n.name)} <small>${n.endless ? `Lv ${n.level}` : `${n.level}/${n.max}`}</small></h3><p>${esc(n.level > 0 ? n.text : n.next)}</p>${!n.maxed && n.level > 0 ? `<p class="star-next">Next: ${esc(n.next)}</p>` : ''}${n.endless ? '' : `<span class="star-pips">${Array.from({ length: n.max }, (_, k) => `<i class="${k < n.level ? 'on' : ''}"></i>`).join('')}</span>`}</div><button class="btn ${n.afford ? 'btn-violet' : ''} star-buy" data-act="star:${esc(n.id)}" ${n.maxed || !n.afford ? 'disabled' : ''}>${n.maxed ? ico('check') : ico('dust')}<span>${n.maxed ? 'Max' : compact(n.cost)}</span></button></div>`).join('')}</div>`,
-  { back: 'back', kicker: 'Permanent upgrades', extra: wallet('dust', stage.stardust, 'Stardust') })
+  return screen('star-chart', esc(t('Star Chart')), `
+    <button class="chart-toggle ${stage.on ? 'on' : ''}" data-act="chart-toggle" aria-pressed="${stage.on}"><span><b>${esc(stage.on ? t('Upgrades active') : t('Purist mode'))}</b><small>${esc(stage.on ? t('Turn off for pure runs and +25% stardust') : t('Upgrades ignored · +25% stardust'))}</small></span><i class="sw"></i></button>
+    <p class="fine">${esc(t('Dailies and shared challenges always use pure rules.'))}</p>
+    <div class="star-grid">${stage.nodes.map((n, i) => `<div class="star-node ${n.maxed ? 'maxed' : ''} ${n.endless ? 'endless' : ''} ${n.level > 0 ? 'owned' : ''}" style="--i:${i}"><span class="star-glyph" aria-hidden="true">${esc(n.glyph)}</span><div class="star-copy"><h3>${esc(n.name)} <small>${n.endless ? esc(t('Lv {n}', { n: n.level })) : `${n.level}/${n.max}`}</small></h3><p>${esc(n.level > 0 ? n.text : n.next)}</p>${!n.maxed && n.level > 0 ? `<p class="star-next">${esc(t('Next: {next}', { next: n.next }))}</p>` : ''}${n.endless ? '' : `<span class="star-pips">${Array.from({ length: n.max }, (_, k) => `<i class="${k < n.level ? 'on' : ''}"></i>`).join('')}</span>`}</div><button class="btn ${n.afford ? 'btn-violet' : ''} star-buy" data-act="star:${esc(n.id)}" ${n.maxed || !n.afford ? 'disabled' : ''}>${n.maxed ? ico('check') : ico('dust')}<span>${n.maxed ? esc(t('Max')) : compact(n.cost)}</span></button></div>`).join('')}</div>`,
+  { back: 'back', kicker: t('Permanent upgrades'), extra: wallet('dust', stage.stardust, t('Stardust')) })
 }
 
 function questRow(q: QuestRow, icon = 'check'): string {
-  const t = q.target ? Math.min(1, q.value / q.target) : 0
-  return `<li class="quest panel ${q.done ? 'done' : ''}"><span class="quest-check" aria-hidden="true">${q.done ? ico('check') : ico(icon)}</span><div><b>${esc(q.text)}</b><span class="bar"><i style="width:${(t * 100).toFixed(1)}%"></i></span><small>${q.value.toLocaleString('en-US')} / ${q.target.toLocaleString('en-US')} · ${esc(q.reward)}</small></div></li>`
+  const done = q.target ? Math.min(1, q.value / q.target) : 0
+  return `<li class="quest panel ${q.done ? 'done' : ''}"><span class="quest-check" aria-hidden="true">${q.done ? ico('check') : ico(icon)}</span><div><b>${esc(q.text)}</b><span class="bar"><i style="width:${(done * 100).toFixed(1)}%"></i></span><small>${ratio(q.value.toLocaleString('en-US'), q.target.toLocaleString('en-US'))} · ${esc(q.reward)}</small></div></li>`
 }
 
 function questsHtml(stage: Extract<StageModel, { kind: 'quests' }>): string {
-  return screen('quests-screen', 'Quests', `
-    <h3 class="section-h">Today <small>new in ${stage.resetHours}h</small></h3><ul class="quest-list">${stage.daily.map(q => questRow(q, 'calendar')).join('')}</ul>
-    <h3 class="section-h">This week</h3><ul class="quest-list">${stage.weekly.map(q => questRow(q, 'star')).join('')}</ul>
-    <p class="fine">Quests count expeditions and dailies, never practice. Missing a day costs nothing.</p>
-    <h3 class="section-h">Feats <small>tiers never run out</small></h3><ul class="quest-list feats">${stage.feats.map(f => questRow({ text: `${f.name} · ${f.text}`, value: f.value, target: f.target, done: false, reward: `+${f.reward} stardust` }, 'trophy')).join('')}</ul>`,
-  { back: 'back', kicker: 'Goals & feats' })
+  return screen('quests-screen', esc(t('Quests')), `
+    <h3 class="section-h">${esc(t('Today'))} <small>${esc(t('new in {h}h', { h: stage.resetHours }))}</small></h3><ul class="quest-list">${stage.daily.map(q => questRow(q, 'calendar')).join('')}</ul>
+    <h3 class="section-h">${esc(t('This week'))}</h3><ul class="quest-list">${stage.weekly.map(q => questRow(q, 'star')).join('')}</ul>
+    <p class="fine">${esc(t('Quests count expeditions and dailies, never practice. Missing a day costs nothing.'))}</p>
+    <h3 class="section-h">${esc(t('Feats'))} <small>${esc(t('tiers never run out'))}</small></h3><ul class="quest-list feats">${stage.feats.map(f => questRow({ text: `${f.name} · ${f.text}`, value: f.value, target: f.target, done: false, reward: t('+{n} stardust', { n: f.reward }) }, 'trophy')).join('')}</ul>`,
+  { back: 'back', kicker: t('Goals & feats') })
 }
 
 function progressHtml(p: ProgressModel): string {
   const up = p.levelAfter > p.levelBefore
   const lines = [
-    ...(up ? [`Rank ${p.levelAfter} · ${p.title} · +${p.levelDust} stardust`] : []),
-    ...(p.sphereUp ? [`${p.sphere} mastery ${p.sphereLevel}`] : []),
-    ...p.finishes.map(f => `New finish: ${f}`),
-    ...(p.depthRecord ? [`New depth record: ${p.depthRecord} circuit${p.depthRecord === 1 ? '' : 's'} · +${p.depthDust} stardust`] : []),
+    ...(up ? [t('Rank {level} · {title} · +{dust} stardust', { level: p.levelAfter, title: p.title, dust: p.levelDust })] : []),
+    ...(p.sphereUp ? [t('{sphere} mastery {level}', { sphere: p.sphere, level: p.sphereLevel })] : []),
+    ...p.finishes.map(f => t('New finish: {name}', { name: f })),
+    ...(p.depthRecord ? [t(p.depthRecord === 1 ? 'New depth record: {n} circuit · +{dust} stardust' : 'New depth record: {n} circuits · +{dust} stardust', { n: p.depthRecord, dust: p.depthDust })] : []),
     ...p.quests,
-    ...p.feats.map(f => `Feat: ${f}`),
+    ...p.feats.map(f => t('Feat: {name}', { name: f })),
   ]
-  return `<section class="progress-panel panel ${up ? 'level-up' : ''}" style="--from:${(up ? 0 : p.xpBefore).toFixed(3)};--to:${p.xpAfter.toFixed(3)}"><div class="progress-row"><span class="rank-num">${p.levelAfter}</span><div class="progress-copy"><small>${up ? 'Rank up!' : 'Rank'} · ${esc(p.title)}</small><span class="xp-bar"><i></i></span></div><div class="progress-gains"><b>+<span data-count="${p.xp}">0</span> XP</b><b class="dust">+<span data-count="${p.dust}">0</span>${ico('dust')}</b></div></div>${lines.length ? `<ul class="progress-news">${lines.map((l, i) => `<li style="--i:${i}">${ico('sparkle')}${esc(l)}</li>`).join('')}</ul>` : ''}${p.pure ? '<p class="fine">Pure rules · no Star Chart upgrades</p>' : ''}</section>`
+  return `<section class="progress-panel panel ${up ? 'level-up' : ''}" style="--from:${(up ? 0 : p.xpBefore).toFixed(3)};--to:${p.xpAfter.toFixed(3)}"><div class="progress-row"><span class="rank-num">${p.levelAfter}</span><div class="progress-copy"><small>${esc(up ? t('Rank up!') : t('Rank'))} · ${esc(p.title)}</small><span class="xp-bar"><i></i></span></div><div class="progress-gains"><b>+<span data-count="${p.xp}">0</span> XP</b><b class="dust">+<span data-count="${p.dust}">0</span>${ico('dust')}</b></div></div>${lines.length ? `<ul class="progress-news">${lines.map((l, i) => `<li style="--i:${i}">${ico('sparkle')}${esc(l)}</li>`).join('')}</ul>` : ''}${p.pure ? `<p class="fine">${esc(t('Pure rules · no Star Chart upgrades'))}</p>` : ''}</section>`
 }
 
-function artifactKind(name: string, tags = ''): string {
+function artifactKind(shownName: string, shownTags = ''): string {
+  // Names and tags may arrive translated: match on their English source.
+  const name = source(shownName)
+  const tags = shownTags.split('·').map(tag => source(tag.trim())).join(' · ')
   const title = name.toLowerCase()
   if (/echo|afterimage/.test(title)) return 'echo'
   if (/spring|flywheel/.test(title)) return 'spring'

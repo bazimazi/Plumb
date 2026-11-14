@@ -111,6 +111,8 @@ test.beforeEach(async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   ;(page as Page & { gameErrors?: string[] }).gameErrors = errors
+  // These assertions read the English copy; Persian is the default, so pin English on every load.
+  await page.addInitScript(() => localStorage.setItem('plumb-lang', 'en'))
 })
 
 test.afterEach(async ({ page }) => {

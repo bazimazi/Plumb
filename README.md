@@ -2,6 +2,15 @@
 
 A pachinko roguelite. The sphere falls through a living machine. You cannot hold it. You can still decide the fall.
 
+## Languages
+
+PLUMB plays in **Persian (فارسی)** by default and in **English**. Switch in Settings → Language; the choice is remembered on the device, and `?lang=en` or `?lang=fa` overrides it for one visit. Persian lays the interface out right to left with the bundled Vazirmatn font (OFL, offline), while the machine and the physical controls (nudge left stays on the left) are never mirrored.
+
+- English is the source language. Every visible string passes through `t()` from `src/i18n`, which looks it up in the active dictionary and falls back to English. Placeholders use `{name}`.
+- Persian dictionaries live in `src/i18n/fa/`, one file per layer (content, sim, game, ui), with a shared glossary in `src/i18n/fa/index.ts`.
+- To add a language, add a dictionary folder and register it in `LOCALES` and `DICTS` in `src/i18n/index.ts`.
+- `npm run verify:i18n` fails when a literal `t()` key has no Persian entry, when placeholders differ from the English, or when two dictionaries disagree. Headless checks and the existing browser tests run in English.
+
 ## The long game · v0.2
 
 PLUMB now rewards every expedition, keeps difficulty rising without a ceiling, and treats the phone as the primary device.

@@ -5,6 +5,7 @@ import type { Drop } from '../sim/drop'
 import { drawAstrolabe, drawAtmosphere, drawEngraving } from './atmosphere'
 import type { BallDef } from '../content/catalog'
 import { drawReactor } from './machinery'
+import { t } from '../i18n'
 
 export interface Particle {
   x: number
@@ -399,13 +400,15 @@ function drawChainReadout(ctx: CanvasRenderingContext2D, drop: Drop, pal: Palett
   ctx.save()
   ctx.textAlign = side > 0 ? 'left' : 'right'
   ctx.textBaseline = 'middle'
-  ctx.font = '800 21px "Fredoka Variable", Fredoka, system-ui, sans-serif'
+  ctx.font = '800 21px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif'
   ctx.strokeStyle = '#03090ff0'; ctx.lineWidth = 5
-  const label = `${drop.combo} CHAIN`
+  const label = t('{n} CHAIN', { n: drop.combo })
+  textDirection(ctx, label)
   ctx.strokeText(label, x, b.y - 15)
   ctx.fillStyle = drop.combo >= 10 ? pal.gold : '#effff9'; ctx.fillText(label, x, b.y - 15)
-  ctx.font = '700 11px monospace'
-  const mult = `×${drop.mult.toFixed(1)}${drop.overdriveTime > 0 ? ' · SURGE' : ''}`
+  ctx.font = '700 11px ui-monospace, "Vazirmatn Variable", monospace'
+  const mult = `×${drop.mult.toFixed(1)}${drop.overdriveTime > 0 ? ` · ${t('SURGE')}` : ''}`
+  textDirection(ctx, mult)
   ctx.strokeText(mult, x, b.y + 3); ctx.fillStyle = pal.accent; ctx.fillText(mult, x, b.y + 3)
   // Depleting chain window is real timing information, not decorative animation.
   const left = Math.max(0, Math.min(1, drop.comboTimer / drop.profile.comboWindow))
@@ -658,7 +661,7 @@ function drawGuardianRelay(ctx: CanvasRenderingContext2D, b: Bumper, flash: numb
     ctx.strokeStyle = pal.gold; ctx.lineWidth = 3; ctx.lineCap = 'round'
     ctx.beginPath(); ctx.moveTo(-r * .25, 0); ctx.lineTo(-r * .04, r * .2)
     ctx.lineTo(r * .35, -r * .25); ctx.stroke()
-    ctx.font = '700 11px "Fredoka Variable", Fredoka, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = pal.gold
+    ctx.font = '700 11px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = pal.gold
     ctx.fillText(['I', 'II', 'III'][id] ?? String(id + 1), 0, r + 27)
     ctx.restore(); return
   }
@@ -732,7 +735,7 @@ function drawGuardianRelay(ctx: CanvasRenderingContext2D, b: Bumper, flash: numb
 
   // Large glyphs and explicit marks distinguish NEXT, credited, and idle targets.
   const label = ['I', 'II', 'III'][id] ?? String(id + 1)
-  ctx.font = `800 ${Math.max(13, r * .43)}px "Fredoka Variable", Fredoka, system-ui, sans-serif`
+  ctx.font = `800 ${Math.max(13, r * .43)}px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif`
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   ctx.strokeStyle = '#02070c'; ctx.lineWidth = 4
   ctx.strokeText(label, 0, r * .64); ctx.fillStyle = credited ? pal.gold : '#f3f8ec'; ctx.fillText(label, 0, r * .64)
@@ -749,7 +752,7 @@ function drawGuardianRelay(ctx: CanvasRenderingContext2D, b: Bumper, flash: numb
     }
     if (!bell) {
       ctx.fillStyle = '#03131a'; roundRect(ctx, -23, -rr - 22, 46, 17, 4); ctx.fill()
-      ctx.fillStyle = cyan; ctx.font = '800 11px "Fredoka Variable", Fredoka, system-ui, sans-serif'; ctx.fillText('NEXT', 0, -rr - 13)
+      ctx.fillStyle = cyan; ctx.font = '800 11px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif'; ctx.fillText(t('NEXT'), 0, -rr - 13)
       ctx.beginPath(); ctx.moveTo(-4, -rr - 3); ctx.lineTo(0, -rr + 2); ctx.lineTo(4, -rr - 3); ctx.lineWidth = 1.5; ctx.stroke()
     }
   }
@@ -787,10 +790,10 @@ function drawCoreSeal(ctx: CanvasRenderingContext2D, x: number, y: number, r: nu
       ctx.beginPath(); ctx.arc(0, 0, rr + 18, a, a + .5); ctx.stroke()
     }
   }
-  ctx.textAlign = 'center'; ctx.font = '700 11px monospace'
+  ctx.textAlign = 'center'; ctx.font = '700 11px ui-monospace, "Vazirmatn Variable", monospace'
   ctx.fillStyle = '#030910'; ctx.fillRect(-64, rr + 23, 128, 18)
   ctx.fillStyle = drop.coreOpen ? pal.gold : drop.coreHits >= 2 ? pal.danger : pal.accent
-  ctx.fillText(drop.coreOpen ? 'CORE UNSEALED' : drop.coreHits >= 4 ? 'FINAL SEAL' : `${5 - drop.coreHits} SEALS · ${drop.coreHits >= 2 ? 'OVERCLOCK' : 'STABLE'}`, 0, rr + 35)
+  ctx.fillText(drop.coreOpen ? t('CORE UNSEALED') : drop.coreHits >= 4 ? t('FINAL SEAL') : t(drop.coreHits >= 2 ? '{n} SEALS · OVERCLOCK' : '{n} SEALS · STABLE', { n: 5 - drop.coreHits }), 0, rr + 35)
   ctx.restore()
 }
 
@@ -849,8 +852,8 @@ function drawPreview(ctx: CanvasRenderingContext2D, input: DrawInput, pal: Palet
         const a = Math.PI * k / 2
         ctx.beginPath(); ctx.arc(p.x, p.y, rr, a + .2, a + 1.15); ctx.stroke()
       }
-      ctx.font = '700 10px monospace'; ctx.textAlign = 'center'
-      const text = peg.kind === 'gold' ? 'GOLD CONTACT' : 'FIRST CONTACT'
+      ctx.font = '700 10px ui-monospace, "Vazirmatn Variable", monospace'; ctx.textAlign = 'center'
+      const text = peg.kind === 'gold' ? t('GOLD CONTACT') : t('FIRST CONTACT')
       const w = ctx.measureText(text).width + 16
       const labelX = Math.max(board.margin + w / 2 + 8, Math.min(board.w - board.margin - w / 2 - 8, p.x))
       let labelY = p.y - rr - 23
@@ -894,9 +897,10 @@ function drawLauncher(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, p
   ctx.restore()
   if (input.aiming) {
     // Degree readout and symmetric brackets turn the launcher into a precision instrument.
-    ctx.save(); ctx.textAlign = 'center'; ctx.font = '700 10px monospace'
+    ctx.save(); ctx.textAlign = 'center'; ctx.font = '700 10px ui-monospace, "Vazirmatn Variable", monospace'
     ctx.fillStyle = pal.accent
     const deg = Math.round(input.aimAngle * 180 / Math.PI)
+    ctx.direction = 'ltr'
     ctx.fillText(`${deg > 0 ? '+' : ''}${deg}°`, x, y + 91)
     ctx.strokeStyle = pal.accent + '80'; ctx.lineWidth = 1.5
     for (const side of [-1, 1]) {
@@ -985,11 +989,20 @@ function binColor(bin: Bin, pal: Palette): string {
   return pal.frame
 }
 
+/**
+ * Numbers and signs such as "+12", "×1.5" or "+3°" read left to right in every language; only text
+ * that contains right-to-left script follows the document direction. Alignment here is always
+ * left/right/center, so the direction changes bidi ordering, never placement.
+ */
+function textDirection(ctx: CanvasRenderingContext2D, text: string) {
+  ctx.direction = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/.test(text) ? 'inherit' : 'ltr'
+}
+
 function binLabel(bin: Bin, board: Board, drop: Drop): string {
-  if (bin.kind === 'hazard') return 'GUTTER'
+  if (bin.kind === 'hazard') return t('GUTTER')
   if (bin.kind === 'coin') return `+${Math.round(12 * board.payout)}`
-  if (bin.kind === 'bonus') return 'RICH ×'
-  return drop.coreOpen || !board.boss ? 'MAW' : 'SEALED'
+  if (bin.kind === 'bonus') return t('RICH ×')
+  return drop.coreOpen || !board.boss ? t('MAW') : t('SEALED')
 }
 
 function drawBins(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: Palette, input: DrawInput) {
@@ -1048,15 +1061,17 @@ function drawBins(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
         ctx.fill()
       }
     }
-    ctx.font = '700 13px "Fredoka Variable", Fredoka, system-ui, sans-serif'
+    ctx.font = '700 13px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.globalAlpha = hot ? 1 : armed ? 0.7 + 0.3 * pulse : 0.65
     ctx.fillStyle = color
     const label = binLabel(bin, board, drop)
+    textDirection(ctx, label)
     if (x1 - x0 > ctx.measureText(label).width + 10) ctx.fillText(label, mid, top + (bin.kind === 'hazard' ? 54 : 44))
     ctx.globalAlpha = 1
     ctx.textBaseline = 'alphabetic'
+    ctx.direction = 'inherit'
   }
   // Dividers between pockets.
   ctx.lineCap = 'round'
@@ -1427,15 +1442,17 @@ function drawFloaters(ctx: CanvasRenderingContext2D, floaters: Floater[]) {
     const size = (f.size ?? 18) * pop
     const left = f.life / f.max
     ctx.globalAlpha = left < 0.35 ? left / 0.35 : 1
-    ctx.font = `800 ${size.toFixed(1)}px "Fredoka Variable", Fredoka, system-ui, sans-serif`
+    ctx.font = `800 ${size.toFixed(1)}px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif`
     ctx.lineWidth = Math.max(3, size * 0.22)
     ctx.strokeStyle = 'rgba(8,6,4,0.85)'
+    textDirection(ctx, f.text)
     ctx.strokeText(f.text, f.x, f.y)
     ctx.fillStyle = f.color
     ctx.fillText(f.text, f.x, f.y)
   }
   ctx.globalAlpha = 1
   ctx.textBaseline = 'alphabetic'
+  ctx.direction = 'inherit'
 }
 
 function parseHex(hex: string): [number, number, number] {

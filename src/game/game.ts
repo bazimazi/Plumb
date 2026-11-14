@@ -22,6 +22,7 @@ import { PRACTICE_BUILDS, PRACTICE_MACHINES, copyRecipe, practiceRecipe, recipeM
 import { randomFrom, rollReward, rollShop, type Offer } from './offers'
 import { Haptics, type HapticCue } from '../haptics'
 import { DAILY_QUEST_REWARD, FEATS, FINISHES, NO_BONUS, STAR_NODES, WEEKLY_QUEST_REWARD, addXp, advanceQuests, toRoman, chartBonuses, dayKey, depthBounty, featProgress, featReward, finishFor, masteryXp, questDefs, rankReward, rankTitle, rankXp, starCost, starNode, stardustFor, weekKey, xpFor, type ChartBonuses, type QuestDef, type QuestStat } from '../meta/progression'
+import { LOCALES, isLocale, list as joinList, locale, setLocale, source, t } from '../i18n'
 import { UI, type ChoiceCard, type ProgressModel, type HudModel, type StageModel, type SummaryModel, type ViewModel } from '../ui/ui'
 
 /** Screens whose state is fully captured by an expedition checkpoint. */
@@ -189,7 +190,7 @@ export class Game {
   private frameBase = 1000
   private menuSkip = false
   /** Rewards earned mid-run, announced at a calm moment. */
-  private questNews: string[] = []
+  private questNews: { weekly: boolean; text: string; dust: number }[] = []
   /** Rank before quest XP was granted mid-run, so the debrief can still show the level-up. */
   /** A new run that would overwrite the saved expedition waits for a second, confirming tap. */
   private replaceArmed = ''
@@ -401,7 +402,7 @@ export class Game {
     if (!this.practice && !this.save.coachingComplete && this.run?.nodeId === 'workshop' && this.workshopNudged && this.drop.overdriveUses > 0) {
       this.save.coachingComplete = true
       writeSave(this.save)
-      this.say('You control the fall', 'Workshop tips complete · replay them from How to play', 2, false)
+      this.say(t('You control the fall'), t('Workshop tips complete · replay them from How to play'), 2, false)
     }
     if (this.drop.captured || this.drop.dead) this.finishDrop()
   }
@@ -690,7 +691,7 @@ export class Game {
     this.offers = []
     this.toast = null
     this.flash = ''
-    this.resolveCopy = { title: 'Practice complete', sub: '' }
+    this.resolveCopy = { title: t('Practice complete'), sub: '' }
     this.sfx.resume()
     this.beginAim(node)
     this.selectedPulse++
@@ -701,18 +702,18 @@ export class Game {
     if (!session) return { kind: 'none' }
     const p = session.recipe
     const machine = PRACTICE_MACHINES.find(m => m.id === this.labMachine) ?? PRACTICE_MACHINES[0]
-    const loadout = [...p.relics.map(id => RELICS[id].name), ...p.upgrades.map(id => UPGRADES[id].name)]
+    const loadout = [...p.relics.map(id => t(RELICS[id].name)), ...p.upgrades.map(id => t(UPGRADES[id].name))]
     return {
       kind: 'laboratory', lab: {
-        machines: PRACTICE_MACHINES.map(m => ({ ...m, selected: m.id === this.labMachine })),
-        spheres: BALL_LIST.map(b => ({ id: b.id, name: b.name, selected: b.id === p.ballId })),
-        builds: PRACTICE_BUILDS.map(b => ({ id: b.id, name: b.name, text: b.text, selected: !p.matched && b.id === this.labBuild })),
-        seed: p.seed, matched: p.matched, title: p.node.title,
+        machines: PRACTICE_MACHINES.map(m => ({ ...m, name: t(m.name), text: t(m.text), goal: t(m.goal), selected: m.id === this.labMachine })),
+        spheres: BALL_LIST.map(b => ({ id: b.id, name: t(b.name), selected: b.id === p.ballId })),
+        builds: PRACTICE_BUILDS.map(b => ({ id: b.id, name: t(b.name), text: t(b.text), selected: !p.matched && b.id === this.labBuild })),
+        seed: p.seed, matched: p.matched, title: t(p.node.title),
         description: p.matched
-          ? `Your last machine: same board, ${p.integrity}/${p.integrityMax} starting shell, Trial ${p.ascension}, circuit ${p.loop + 1}, and ${loadout.length ? loadout.join(' + ') : 'stock sphere'}. Changing a selector starts a standard practice setup.`
-          : machine.goal,
+          ? t('Your last machine: same board, {shell}/{max} starting shell, Trial {trial}, circuit {circuit}, and {loadout}. Changing a selector starts a standard practice setup.', { shell: p.integrity, max: p.integrityMax, trial: p.ascension, circuit: p.loop + 1, loadout: loadout.length ? loadout.join(' + ') : t('stock sphere') })
+          : t(machine.goal),
         attempt: session.attempt,
-        best: session.best ? { earned: session.best.earned, combo: session.best.peakCombo, objective: session.best.objective ? `${session.best.objective.progress}/${session.best.objective.required} ${session.best.objective.name}` : session.best.title } : undefined,
+        best: session.best ? { earned: session.best.earned, combo: session.best.peakCombo, objective: session.best.objective ? `${session.best.objective.progress}/${session.best.objective.required} ${t(session.best.objective.name)}` : t(session.best.title) } : undefined,
       },
     }
   }
@@ -782,6 +783,15 @@ export class Game {
     if (!this.offers.length) { this.drafting = false; this.enterNode('workshop'); return }
     this.screen = 'choices'
     this.checkpoint()
+  }
+
+  /**
+   * The draft heading, rebuilt in the active language. `draftTitle` keeps the English text in the
+   * checkpoint, and every draft is either the opening one or the one after a cleared circuit.
+   */
+  private draftHeading(): string {
+    const loop = this.run?.loop ?? 0
+    return loop > 0 ? t('Circuit {n} · keep your build, choose a new relic', { n: loop + 1 }) : t('Choose the heart of your build')
   }
 
   private enterNode(id: string): void {
@@ -900,15 +910,15 @@ export class Game {
     drop.hitstop = 0
     const win = drop.wonBoss
     const boss = node.kind === 'boss'
-    if (win && drop.jackpot) this.resolveCopy = { title: 'Jackpot', sub: 'The maw pays.' }
-    else if (win && drop.captured === 'jackpot') this.resolveCopy = { title: 'The Grinder falls', sub: 'The maw was cold. The core is still broken.' }
-    else if (win) this.resolveCopy = { title: 'The Grinder falls', sub: 'You broke the core and missed the maw.' }
-    else if (boss) this.resolveCopy = { title: 'The Grinder keeps you', sub: `${drop.coreHits} of 5 hits.` }
-    else if (drop.dead) this.resolveCopy = { title: 'The shell opens', sub: 'The fall ends.' }
-    else if (drop.encounterComplete && drop.board.encounter) this.resolveCopy = { title: `${drop.board.encounter.name} linked`, sub: `+${drop.board.encounter.bounty} guardian gears earned · choose a relic` }
-    else if (drop.board.encounter) this.resolveCopy.sub = `${drop.encounterProgress}/${drop.board.encounter.required} relays linked · the route continues`
-    else this.resolveCopy = { title: this.resolveCopy.title || 'Settled', sub: [this.resolveCopy.sub, drop.hazardThis === 0 ? 'clean drop' : ''].filter(Boolean).join(' · ') }
-    if (fulfilled.length) this.resolveCopy.sub += ` · Commission complete: ${fulfilled.map(c => `${c.name} (+${c.gears} gears${drop.dead ? '' : ', mend 1 shell'})`).join(', ')}`
+    if (win && drop.jackpot) this.resolveCopy = { title: t('Jackpot'), sub: t('The maw pays.') }
+    else if (win && drop.captured === 'jackpot') this.resolveCopy = { title: t('The Grinder falls'), sub: t('The maw was cold. The core is still broken.') }
+    else if (win) this.resolveCopy = { title: t('The Grinder falls'), sub: t('You broke the core and missed the maw.') }
+    else if (boss) this.resolveCopy = { title: t('The Grinder keeps you'), sub: t('{n} of 5 hits.', { n: drop.coreHits }) }
+    else if (drop.dead) this.resolveCopy = { title: t('The shell opens'), sub: t('The fall ends.') }
+    else if (drop.encounterComplete && drop.board.encounter) this.resolveCopy = { title: t('{name} linked', { name: t(drop.board.encounter.name) }), sub: t('+{n} guardian gears earned · choose a relic', { n: drop.board.encounter.bounty }) }
+    else if (drop.board.encounter) this.resolveCopy.sub = t('{progress}/{required} relays linked · the route continues', { progress: drop.encounterProgress, required: drop.board.encounter.required })
+    else this.resolveCopy = { title: this.resolveCopy.title || t('Settled'), sub: [this.resolveCopy.sub, drop.hazardThis === 0 ? t('clean drop') : ''].filter(Boolean).join(' · ') }
+    if (fulfilled.length) this.resolveCopy.sub += ` · ${t('Commission complete: {list}', { list: joinList(fulfilled.map(c => t(drop.dead ? '{name} (+{n} gears)' : '{name} (+{n} gears, mend 1 shell)', { name: t(c.name), n: c.gears }))) })}`
     this.screen = 'resolve'
     const lit = drop.litOrder.filter((i) => !drop.gone[i])
     const step = clamp(0.95 / Math.max(1, lit.length), 0.022, 0.07)
@@ -1001,10 +1011,10 @@ export class Game {
       if (relic) {
         run.relics.push(relic.id)
         this.recompute()
-        this.say(relic.name, 'The bargain keeps its word.', 1.4, true)
+        this.say(t(relic.name), t('The bargain keeps its word.'), 1.4, true)
       } else {
         run.gears += 28
-        this.say('Empty hands', 'No new relic. The machine pays scrap.', 1.2, false)
+        this.say(t('Empty hands'), t('No new relic. The machine pays scrap.'), 1.2, false)
       }
     } else if (which === 'pay') {
       if (run.gears < 30) return
@@ -1013,7 +1023,7 @@ export class Game {
       if (up) {
         run.upgrades.push(up.id)
         this.recompute()
-        this.say(up.name, 'Installed without asking.', 1.3, false)
+        this.say(t(up.name), t('Installed without asking.'), 1.3, false)
       } else run.gears += 30
     } else {
       run.gears += 18
@@ -1028,10 +1038,10 @@ export class Game {
     if (run.integrity < run.integrityMax) {
       const amount = this.repairAmount()
       run.integrity = Math.min(run.integrityMax, run.integrity + amount)
-      this.say('Mended', amount >= 99 ? 'The next act begins with a whole shell.' : `Restore up to ${amount} shell.`, 1, false)
+      this.say(t('Mended'), amount >= 99 ? t('The next act begins with a whole shell.') : t('Restore up to {n} shell.', { n: amount }), 1, false)
     } else {
       run.gears += 12
-      this.say('Already whole', 'You pocket 12 gears of scrap.', 1, false)
+      this.say(t('Already whole'), t('You pocket 12 gears of scrap.'), 1, false)
     }
     this.sfx.ui()
     this.advance()
@@ -1107,11 +1117,11 @@ export class Game {
     const awakened: string[] = []
     if (!this.save.balls.includes('prism')) {
       this.save.balls.push('prism')
-      awakened.push('Prism Core')
+      awakened.push(t('Prism Core'))
     }
     if (!this.save.balls.includes('void') && (run.reachedCore || this.save.runs >= 2)) {
       this.save.balls.push('void')
-      awakened.push('Void Marble')
+      awakened.push(t('Void Marble'))
     }
     const challenges = grantChallenges(this.save, {
       bestCombo: run.bestCombo,
@@ -1129,24 +1139,24 @@ export class Game {
     const next = this.nextSchematic()
     this.summary = {
       progress,
-      heading: win ? 'The Grinder falls' : 'Run complete',
+      heading: win ? t('The Grinder falls') : t('Run complete'),
       line: win
-        ? this.drop?.dead ? 'The core broke. The shell did not survive the landing.' : 'The Helix is quieter for a moment.'
+        ? this.drop?.dead ? t('The core broke. The shell did not survive the landing.') : t('The Helix is quieter for a moment.')
         : run.integrity > 0
-          ? `The sphere left the machine. The shell is still ${run.integrity >= run.integrityMax ? 'whole' : 'holding'}.`
-          : 'The shell gives out. The machine keeps the rest.',
+          ? run.integrity >= run.integrityMax ? t('The sphere left the machine. The shell is still whole.') : t('The sphere left the machine. The shell is still holding.')
+          : t('The shell gives out. The machine keeps the rest.'),
       score: run.score,
       best: run.score > beforeBest && run.score > 0,
       gears: run.gears,
       mult: formatMult(run.bestMult),
       combo: run.bestCombo,
-      depth: run.depthTitle,
+      depth: t(run.depthTitle),
       shards: gained + challenges.length * TUNING.challengeShards,
       awakened,
       challenges,
       temptation: this.temptation(awakened, next),
       canStudy: !!next && this.save.shards >= this.researchCost(),
-      studyLabel: next ? `Study · ${next.lockHint}` : '',
+      studyLabel: next ? t('Study · {hint}', { hint: t(next.lockHint) }) : '',
       seed: run.seed,
       ballId: run.ballId,
       catalogue: [...run.catalogue],
@@ -1155,19 +1165,19 @@ export class Game {
       commissions: run.claimed.length,
       debrief: this.drop && (this.drop.captured || this.drop.dead) ? describeDrop(this.drop) : undefined,
     }
-    if (earnedTrial && this.summary) this.summary.awakened.push(`Trial ${mastered + 1} for ${ballById(run.ballId).name}`)
+    if (earnedTrial && this.summary) this.summary.awakened.push(t('Trial {n} for {sphere}', { n: mastered + 1, sphere: t(ballById(run.ballId).name) }))
     this.screen = 'runend'
     this.save.ball = run.ballId
     writeSave(this.save)
   }
 
   private temptation(awakened: string[], next: { lockHint: string } | null): string {
-    if (awakened.length) return 'A new sphere is waiting in the hub.'
-    if (next && this.save.shards >= this.researchCost()) return `A schematic is ready — ${next.lockHint}.`
-    if (next) return `${this.save.shards}/${this.researchCost()} shards toward ${next.lockHint}.`
-    const trail = TRAILS.find((t) => !this.save.trails.includes(t.id))
-    if (trail && this.save.shards >= TUNING.trailCost) return `The archive can cast a ${trail.name.toLowerCase()}.`
-    return 'The next seed will not rebuild this machine.'
+    if (awakened.length) return t('A new sphere is waiting in the hub.')
+    if (next && this.save.shards >= this.researchCost()) return t('A schematic is ready — {hint}.', { hint: t(next.lockHint) })
+    if (next) return t('{shards}/{cost} shards toward {hint}.', { shards: this.save.shards, cost: this.researchCost(), hint: t(next.lockHint) })
+    const trail = TRAILS.find((trail) => !this.save.trails.includes(trail.id))
+    if (trail && this.save.shards >= TUNING.trailCost) return t('The archive can cast a {trail}.', { trail: t(trail.name).toLowerCase() })
+    return t('The next seed will not rebuild this machine.')
   }
 
   private nextSchematic(): { id: string; lockHint: string; name: string; text: string; tags: string[] } | null {
@@ -1182,7 +1192,7 @@ export class Game {
     if (next && this.save.shards >= this.researchCost()) {
       this.save.shards -= this.researchCost()
       this.save.researched.push(next.id)
-      this.reveal = { name: next.name, text: next.text, tags: next.tags.join(' · ') }
+      this.reveal = { name: t(next.name), text: t(next.text), tags: next.tags.map(tag => t(tag)).join(' · ') }
       this.returnTo = this.screen
       this.screen = 'reveal'
       writeSave(this.save)
@@ -1194,7 +1204,7 @@ export class Game {
       this.save.shards -= TUNING.trailCost
       this.save.trails.push(trail.id)
       this.save.trail = trail.id
-      this.reveal = { name: trail.name, text: 'A cosmetic wake. The sphere falls the same. It only looks like you meant it.', tags: 'cosmetic' }
+      this.reveal = { name: t(trail.name), text: t('A cosmetic wake. The sphere falls the same. It only looks like you meant it.'), tags: t('cosmetic') }
       this.returnTo = this.screen
       this.screen = 'reveal'
       writeSave(this.save)
@@ -1257,10 +1267,11 @@ export class Game {
       this.save.stardust += reward.dust
       this.questRank ??= { level: this.save.level, xp: this.save.xp, dust: 0 }
       this.questRank.dust += this.grantRankXp(reward.xp).reduce((sum, level) => sum + rankReward(level), 0)
-      this.questNews.push(`${weekly ? 'Weekly' : 'Daily'} quest · ${q.text} · +${reward.dust} stardust`)
+      this.questNews.push({ weekly, text: q.text, dust: reward.dust })
     }
     if (finished.length) {
-      this.say('Quest complete', this.questNews[this.questNews.length - 1].replace(/^(Daily|Weekly) quest · /, ''), 1.8, false)
+      const last = this.questNews[this.questNews.length - 1]
+      this.say(t('Quest complete'), t('{quest} · +{n} stardust', { quest: t(last.text), n: last.dust }), 1.8, false)
       this.sfx.gold(5)
       this.feel('level')
     }
@@ -1291,7 +1302,7 @@ export class Game {
       for (let tier = claimed; tier < p.tier; tier++) {
         const dust = featReward(tier)
         this.save.stardust += dust
-        out.push({ name: `${def.name} ${toRomanTier(tier + 1)}`, dust })
+        out.push({ name: `${t(def.name)} ${toRomanTier(tier + 1)}`, dust })
       }
       if (p.tier > claimed) this.save.feats[def.id] = p.tier
     }
@@ -1315,7 +1326,7 @@ export class Game {
     const sphereBefore = sphere.level
     const sphereLevels = addXp(sphere, xp, masteryXp)
     this.save.sphereLevels[run.ballId] = sphere
-    const finishes = (FINISHES[run.ballId] ?? []).filter(f => f.level > sphereBefore && f.level <= sphere.level).map(f => f.name)
+    const finishes = (FINISHES[run.ballId] ?? []).filter(f => f.level > sphereBefore && f.level <= sphere.level).map(f => t(f.name))
     // A new endless depth pays once per sphere, so repeating shallow circuits cannot farm it.
     let depth = 0
     const deepest = this.save.deepest[run.ballId] ?? 0
@@ -1328,14 +1339,14 @@ export class Game {
       for (const id of [...run.relics, ...run.upgrades]) this.save.stickers[id] = Math.max(this.save.stickers[id] ?? 0, run.ascension + 1)
     }
     const feats = this.claimFeats()
-    const news = [...this.questNews]
+    const news = this.questNews.map(n => t(n.weekly ? 'Weekly quest · {quest} · +{n} stardust' : 'Daily quest · {quest} · +{n} stardust', { quest: t(n.text), n: n.dust }))
     this.questNews = []
     return {
       xp, dust, levelDust, depthDust: depth, depthRecord: depth ? run.clears : 0,
       levelBefore: before.level, levelAfter: this.save.level,
       xpBefore: before.xp / rankXp(before.level), xpAfter: this.save.xp / rankXp(this.save.level),
-      title: rankTitle(this.save.level),
-      sphere: ballById(run.ballId).name, sphereLevel: sphere.level, sphereUp: sphereLevels.length > 0, finishes,
+      title: t(rankTitle(this.save.level)),
+      sphere: t(ballById(run.ballId).name), sphereLevel: sphere.level, sphereUp: sphereLevels.length > 0, finishes,
       feats: feats.map(f => `${f.name} · +${f.dust}`), quests: news, pure: !!run.pure,
       stardust: this.save.stardust,
     }
@@ -1388,7 +1399,7 @@ export class Game {
     if (next === 3) bits.unshift('one less maximum shell')
     if (next === 6) bits.unshift('one fewer nudge')
     if (next === 9) bits.unshift('a single Overdrive per machine')
-    return bits.join(' · ')
+    return bits.map(bit => t(bit)).join(' · ')
   }
 
   private maxRerolls(): number { return 2 + this.bonuses().rerolls }
@@ -1403,30 +1414,36 @@ export class Game {
     const event = run.nodes[run.nodeId].eventId
     const relic = randomFrom('relic', run.ballId, run.upgrades, run.relics, run.catalogue, run.seed, `event:${run.loop}:${run.nodeId}:relic`)
     const upgrade = randomFrom('upgrade', run.ballId, run.upgrades, run.relics, run.catalogue, run.seed, `event:${run.loop}:${run.nodeId}:upgrade`)
-    let title = 'The Salvage Bell'
-    let story = 'A stranded mechanic offers you a choice from the wreckage.'
+    // Each tag is translated on its own so the UI can split them on ' · ' and recover the English keys.
+    const tags = (...list: string[]) => list.join(' · ')
+    const relicName = relic ? t(relic.name) : ''
+    const relicText = relic ? t(relic.text) : ''
+    const upgradeName = upgrade ? t(upgrade.name) : ''
+    const upgradeText = upgrade ? t(upgrade.text) : ''
+    let title = t('The Salvage Bell')
+    let story = t('A stranded mechanic offers you a choice from the wreckage.')
     let choices: { name: string; text: string; afford: boolean; tags: string }[]
     if (event === 'resonance') {
-      title = 'The Resonance Chamber'
-      story = 'The machine can copy a heartbeat. It asks for a little of yours.'
+      title = t('The Resonance Chamber')
+      story = t('The machine can copy a heartbeat. It asks for a little of yours.')
       choices = [
-        { name: relic?.name ?? 'A hollow echo', text: relic ? `Lose 1 shell. Gain ${relic.name}: ${relic.text}` : 'No relics remain. Take 60 gears instead.', afford: !relic || run.integrity > 1, tags: 'Risk · relic' },
-        { name: upgrade?.name ?? 'Spare components', text: upgrade ? `Install ${upgrade.name} for free. ${upgrade.text}` : 'All upgrades installed. Take 40 gears.', afford: true, tags: 'Upgrade' },
-        { name: 'Quiet the chamber', text: 'Restore 1 shell and take 15 gears.', afford: true, tags: 'Recovery' },
+        { name: relic ? relicName : t('A hollow echo'), text: relic ? t('Lose 1 shell. Gain {name}: {text}', { name: relicName, text: relicText }) : t('No relics remain. Take 60 gears instead.'), afford: !relic || run.integrity > 1, tags: tags(t('Risk'), t('relic')) },
+        { name: upgrade ? upgradeName : t('Spare components'), text: upgrade ? t('Install {name} for free. {text}', { name: upgradeName, text: upgradeText }) : t('All upgrades installed. Take 40 gears.'), afford: true, tags: t('Upgrade') },
+        { name: t('Quiet the chamber'), text: t('Restore 1 shell and take 15 gears.'), afford: true, tags: t('Recovery') },
       ]
     } else if (event === 'oracle') {
-      title = 'The Blind Astrolabe'
-      story = 'Three futures orbit a lens. Only the one you choose becomes real.'
+      title = t('The Blind Astrolabe')
+      story = t('Three futures orbit a lens. Only the one you choose becomes real.')
       choices = [
-      { name: relic?.name ?? 'The empty shelf', text: relic ? `Pay 50 gears. Gain ${relic.name}: ${relic.text}` : 'No relics remain. Take 60 gears.', afford: !relic || run.gears >= 50, tags: '50 gears · relic' },
-        { name: 'A gentler future', text: 'Pay 20 gears to restore 2 shell.', afford: run.gears >= 20 && run.integrity < run.integrityMax, tags: '20 gears · recovery' },
-        { name: 'Cast the brass die', text: 'Take 18 gears, with a 1 in 4 chance of 110 gears instead. The seed fixes the outcome.', afford: true, tags: 'Fortune' },
+        { name: relic ? relicName : t('The empty shelf'), text: relic ? t('Pay 50 gears. Gain {name}: {text}', { name: relicName, text: relicText }) : t('No relics remain. Take 60 gears.'), afford: !relic || run.gears >= 50, tags: tags(t('{n} gears', { n: 50 }), t('relic')) },
+        { name: t('A gentler future'), text: t('Pay 20 gears to restore 2 shell.'), afford: run.gears >= 20 && run.integrity < run.integrityMax, tags: tags(t('{n} gears', { n: 20 }), t('recovery')) },
+        { name: t('Cast the brass die'), text: t('Take 18 gears, with a 1 in 4 chance of 110 gears instead. The seed fixes the outcome.'), afford: true, tags: t('Fortune') },
       ]
     } else {
       choices = [
-        { name: 'Patch the shell', text: 'Restore 2 shell. If already whole, take 20 gears.', afford: true, tags: 'Recovery' },
-        { name: upgrade?.name ?? 'Useful scrap', text: upgrade ? `Pay 20 gears. Install ${upgrade.name}: ${upgrade.text}` : 'All upgrades installed. Take 40 gears.', afford: !upgrade || run.gears >= 20, tags: '20 gears · upgrade' },
-        { name: 'Sell the wreckage', text: 'Take 70 gears for the next shop.', afford: true, tags: 'Economy' },
+        { name: t('Patch the shell'), text: t('Restore 2 shell. If already whole, take 20 gears.'), afford: true, tags: t('Recovery') },
+        { name: upgrade ? upgradeName : t('Useful scrap'), text: upgrade ? t('Pay 20 gears. Install {name}: {text}', { name: upgradeName, text: upgradeText }) : t('All upgrades installed. Take 40 gears.'), afford: !upgrade || run.gears >= 20, tags: tags(t('{n} gears', { n: 20 }), t('upgrade')) },
+        { name: t('Sell the wreckage'), text: t('Take 70 gears for the next shop.'), afford: true, tags: t('Economy') },
       ]
     }
     return { title, story, cards: choices.map((c, index) => ({ ...c, synergy: '', price: 0, index })) }
@@ -1442,7 +1459,7 @@ export class Game {
         if (kind === 'upgrade') run.upgrades.push(offer.id)
         else { run.relics.push(offer.id); if (!this.save.seenRelics.includes(offer.id)) this.save.seenRelics.push(offer.id) }
         this.recompute()
-        this.say(offer.name, 'A different future takes shape.', 1.4, false)
+        this.say(t(offer.name), t('A different future takes shape.'), 1.4, false)
       } else run.gears += kind === 'relic' ? 60 : 40
       return !!offer
     }
@@ -1504,7 +1521,7 @@ export class Game {
     } catch {
       this.run = null; this.suspended = null; clearCheckpoint()
       this.screen = 'hub'
-      this.say('This expedition could not be restored', 'Your archive is safe. Begin a new descent.', 2, false)
+      this.say(t('This expedition could not be restored'), t('Your archive is safe. Begin a new descent.'), 2, false)
     }
   }
 
@@ -1527,7 +1544,7 @@ export class Game {
       if (e.combo) run.bestCombo = Math.max(run.bestCombo, e.combo)
       if (e.mult) run.bestMult = Math.max(run.bestMult, this.drop?.mult ?? e.mult)
       if (e.type === 'pocket' || e.type === 'jackpot') {
-        this.resolveCopy = { title: e.text || 'Settled', sub: e.gears ? `+${e.gears} gears` : '' }
+        this.resolveCopy = { title: e.text || t('Settled'), sub: e.gears ? t('+{n} gears', { n: e.gears }) : '' }
       }
       // Relay contacts have their own musical cue rather than two stacked hits.
       const relayBumper = e.type === 'bumper' && drop.board.bumpers.some(b => b.relay != null && b.x === e.x && b.y === e.y)
@@ -1541,7 +1558,8 @@ export class Game {
     const pal = e.type.startsWith('overdrive') ? '#80ffe0' : e.type === 'hazard' || e.type === 'shatter-ball' ? '#ff6b5a' : e.type === 'gold' || e.type === 'jackpot' || e.type === 'crit' ? '#ffd56a' : '#f4efe4'
     const accent = this.drop?.ballDef.accent ?? '#7ee0c6'
     const fx = this.save.settings.particles && !this.motionQuery.matches
-    const arc = e.type === 'crit' && e.text === 'CHAIN LIGHTNING'
+    // Floating text arrives translated; compare against its English source.
+    const arc = e.type === 'crit' && !!e.text && source(e.text) === 'CHAIN LIGHTNING'
     const relayEvent = e.type.startsWith('relay-') || e.type === 'encounter-clear' || e.type === 'recirculate'
     if (e.type === 'overdrive-start') this.floaters = this.floaters.filter(f => (f.size ?? 18) <= 22)
     if (e.text && !e.type.startsWith('overdrive') && !relayEvent && !arc && (e.gears || big || e.type === 'refund' || e.type === 'special')) {
@@ -1620,39 +1638,39 @@ export class Game {
     } else if (e.type === 'relay-block') {
       this.sfx.relayBlocked()
     } else if (e.type === 'encounter-clear') {
-      if (this.cssW > 760) this.say('Guardian linked', this.practice ? 'Practice objective complete · finish the fall' : `+${e.gears ?? 0} gears · survive for a relic`, 2, false)
+      if (this.cssW > 760) this.say(t('Guardian linked'), this.practice ? t('Practice objective complete · finish the fall') : t('+{n} gears · survive for a relic', { n: e.gears ?? 0 }), 2, false)
       this.sfx.guardianClear()
     } else if (e.type === 'recirculate') {
       this.snapCam = true
-      this.say('Final pass', 'Progress kept · your next landing settles the fall', 2, false)
+      this.say(t('Final pass'), t('Progress kept · your next landing settles the fall'), 2, false)
       this.sfx.recirculate()
     } else if (e.type === 'overdrive-ready') {
-      if (this.cssW > 760) this.say('Overdrive ready', this.touchQuery.matches ? 'Tap Overdrive · choose the moment' : 'Press E · choose the moment', 1.6, false)
+      if (this.cssW > 760) this.say(t('Overdrive ready'), this.touchQuery.matches ? t('Tap Overdrive · choose the moment') : t('Press E · choose the moment'), 1.6, false)
       this.sfx.overdrive(true)
     } else if (e.type === 'overdrive-start') {
-      this.say('Overdrive', '2× collision payouts · combo held', 1.2, true)
+      this.say(t('Overdrive'), t('2× collision payouts · combo held'), 1.2, true)
       this.sfx.overdrive()
     } else if (e.type === 'jackpot') {
       this.zoom = 1.12
       this.flashAt('gold', 0.45)
-      this.say('Jackpot', e.gears ? `+${e.gears}` : '', 1.6, true)
+      this.say(t('Jackpot'), e.gears ? `+${e.gears}` : '', 1.6, true)
       this.sfx.jackpot()
     } else if (e.type === 'hazard') {
       this.flashAt('hurt', 0.25)
       this.sfx.hazard()
     } else if (e.type === 'shatter-ball') {
       this.flashAt('hurt', 0.4)
-      this.say('Shell broken', '', 1.2, true)
+      this.say(t('Shell broken'), '', 1.2, true)
       this.sfx.shatter()
     } else if (e.type === 'core') {
       this.flashAt('core', 0.2)
       this.sfx.core()
-      this.say(`Core ${e.text ?? ''}`, '', 0.7, true)
+      this.say(t('Core {n}', { n: e.text ?? '' }), '', 0.7, true)
     } else if (e.type === 'maw') {
-      this.say('The maw opens', 'Steer it home.', 1.3, true)
+      this.say(t('The maw opens'), t('Steer it home.'), 1.3, true)
       this.zoom = 1.08
     } else if (e.type === 'feather') {
-      this.say('The clock skips', '', 1, true)
+      this.say(t('The clock skips'), '', 1, true)
     } else if (e.type === 'launch') this.sfx.launch()
     else if (e.type === 'flip') this.sfx.flip()
     else if (e.type === 'nudge') this.sfx.nudge()
@@ -1780,19 +1798,24 @@ export class Game {
   private buildLine(): string {
     const run = this.run
     if (!run) return ''
-    const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-    const bits = [ballById(run.ballId).name, count(run.relics.length, 'relic'), count(run.upgrades.length, 'upgrade')]
-    if (run.profile.synergies[0]) bits.push(run.profile.synergies[0].name)
+    const relics = run.relics.length
+    const upgrades = run.upgrades.length
+    const bits = [
+      t(ballById(run.ballId).name),
+      t(relics === 1 ? '{n} relic' : '{n} relics', { n: relics }),
+      t(upgrades === 1 ? '{n} upgrade' : '{n} upgrades', { n: upgrades }),
+    ]
+    if (run.profile.synergies[0]) bits.push(t(run.profile.synergies[0].name))
     return bits.join('   ·   ')
   }
 
   private choiceCards(shop: boolean): ChoiceCard[] {
     const gears = this.run?.gears ?? 0
     return this.offers.map((offer, index) => ({
-      name: offer.name,
-      tags: offer.tags.join(' · '),
-      text: offer.text,
-      synergy: offer.synergy ?? '',
+      name: t(offer.name),
+      tags: offer.tags.map(tag => t(tag)).join(' · '),
+      text: t(offer.text),
+      synergy: offer.synergy ? t(offer.synergy) : '',
       price: shop ? offer.price : 0,
       afford: shop ? gears >= offer.price : true,
       index,
@@ -1804,15 +1827,15 @@ export class Game {
     const drop = this.drop
     const node = run ? run.nodes[run.nodeId] : null
     if (!run || !drop || !node) return ''
-    if (this.practice) return node.blurb
+    if (this.practice) return t(node.blurb)
     if (this.save.runs === 0 && node.id === 'workshop') {
       const touch = this.touchQuery.matches
-      if (this.screen === 'aim') return touch ? 'Drag to aim, then tap Release. You are choosing a beginning, not a destiny.' : 'Point, then click. You are choosing a beginning, not a destiny.'
-      if (this.screen === 'drop' && drop.overdriveReady) return `Reactor charged. ${touch ? 'Overdrive' : 'E'} lifts the sphere and doubles collision payouts for three seconds.`
-      if (this.screen === 'drop' && drop.nudges === drop.maxNudges) return touch ? 'The Nudge buttons push the sphere. Spend them when the gate is close.' : 'A and D nudge. Spend them when the gate is close.'
-      if (this.screen === 'drop' && drop.flips > 0 && node.layout) return `${touch ? 'Gate' : 'F'} flips the gate. Gold is on the ${drop.board.goldSide}.`
+      if (this.screen === 'aim') return touch ? t('Drag to aim, then tap Release. You are choosing a beginning, not a destiny.') : t('Point, then click. You are choosing a beginning, not a destiny.')
+      if (this.screen === 'drop' && drop.overdriveReady) return t('Reactor charged. {key} lifts the sphere and doubles collision payouts for three seconds.', { key: touch ? t('Overdrive') : 'E' })
+      if (this.screen === 'drop' && drop.nudges === drop.maxNudges) return touch ? t('The Nudge buttons push the sphere. Spend them when the gate is close.') : t('A and D nudge. Spend them when the gate is close.')
+      if (this.screen === 'drop' && drop.flips > 0 && node.layout) return t('{key} flips the gate. Gold is on the {side}.', { key: touch ? t('Gate') : 'F', side: t(drop.board.goldSide) })
     }
-    return node.blurb
+    return t(node.blurb)
   }
 
   private encounterModel(): HudModel['encounter'] {
@@ -1820,16 +1843,16 @@ export class Game {
     const encounter = drop?.board.encounter
     if (!drop || !encounter) return null
     const next = drop.encounterTarget
-    const instruction = encounter.id === 'bellkeeper' ? 'Ring all three bells' : 'Alternate the relays'
+    const instruction = encounter.id === 'bellkeeper' ? t('Ring all three bells') : t('Alternate the relays')
     const target = encounter.id === 'bellkeeper'
-      ? `Unlinked: ${drop.encounterTargets.map(id => ['I', 'II', 'III'][id]).join(' · ')}`
-      : `Next: ${next === 0 ? 'I · left' : 'II · right'}. Order: I → II → I → II.`
+      ? t('Unlinked: {list}', { list: drop.encounterTargets.map(id => ['I', 'II', 'III'][id]).join(' · ') })
+      : next === 0 ? t('Next: I · left. Order: I → II → I → II.') : t('Next: II · right. Order: I → II → I → II.')
     return {
-      title: encounter.name, instruction, progress: drop.encounterProgress, target: encounter.required,
-      reward: this.practice ? 'Practice objective · no awards' : `${encounter.bounty} gears + a relic`, returns: drop.encounterComplete || drop.time >= 75 ? 0 : Math.max(0, 1 - drop.encounterReturns),
+      title: t(encounter.name), instruction, progress: drop.encounterProgress, target: encounter.required,
+      reward: this.practice ? t('Practice objective · no awards') : t('{n} gears + a relic', { n: encounter.bounty }), returns: drop.encounterComplete || drop.time >= 75 ? 0 : Math.max(0, 1 - drop.encounterReturns),
       maxReturns: 1, complete: drop.encounterComplete,
       linked: drop.relayHits.flatMap((hit, id) => hit ? [id] : []), targets: drop.encounterTargets,
-      hint: drop.encounterComplete ? this.practice ? 'Linked. Finish the fall to compare your attempt.' : 'Linked. Survive the landing to claim your relic.' : `${target} One safe-pocket return keeps progress and resources; gutters still cost shell. An incomplete relay still lets you continue.`,
+      hint: drop.encounterComplete ? this.practice ? t('Linked. Finish the fall to compare your attempt.') : t('Linked. Survive the landing to claim your relic.') : t('{target} One safe-pocket return keeps progress and resources; gutters still cost shell. An incomplete relay still lets you continue.', { target }),
     }
   }
 
@@ -1837,10 +1860,10 @@ export class Game {
     const drop = this.drop
     if (this.practice || !drop || !this.run || this.run.nodeId !== 'workshop' || this.run.loop > 0 || this.save.coachingComplete || !['aim', 'drop'].includes(this.screen)) return null
     const touch = this.touchQuery.matches
-    if (this.screen === 'aim') return { step: 1, title: 'Choose your first contact', text: touch ? 'Drag on the machine to aim. The dotted line shows the opening. Tap Release when you like the first contact.' : 'Aim with the pointer or arrows. The dotted line shows the opening. Release when you like the first contact.', action: 'launch' }
-    if (!drop.overdriveReady && !this.workshopNudged) return { step: 2, title: 'You can change the line', text: `${touch ? 'The' : 'A / D or the'} Nudge buttons give a short push. Try one as the sphere approaches a useful lane.`, action: 'nudge' }
-    if (drop.overdriveUses === 0) return { step: 3, title: drop.overdriveReady ? 'Make your moment' : 'Charge the reactor', text: drop.overdriveReady ? `${touch ? 'Tap' : 'Press E or'} Overdrive: lift the sphere and double collision payouts for three seconds. Two uses per machine.` : 'Five different physical peg contacts charge Overdrive. Repeated hits and relic lightning do not add charge.', action: 'overdrive' }
-    return { step: 2, title: 'Try steering the fall', text: `You used the reactor. Try ${touch ? 'a' : 'A / D or a'} Nudge button to move toward the next useful lane.`, action: 'nudge' }
+    if (this.screen === 'aim') return { step: 1, title: t('Choose your first contact'), text: touch ? t('Drag on the machine to aim. The dotted line shows the opening. Tap Release when you like the first contact.') : t('Aim with the pointer or arrows. The dotted line shows the opening. Release when you like the first contact.'), action: 'launch' }
+    if (!drop.overdriveReady && !this.workshopNudged) return { step: 2, title: t('You can change the line'), text: touch ? t('The Nudge buttons give a short push. Try one as the sphere approaches a useful lane.') : t('A / D or the Nudge buttons give a short push. Try one as the sphere approaches a useful lane.'), action: 'nudge' }
+    if (drop.overdriveUses === 0) return { step: 3, title: drop.overdriveReady ? t('Make your moment') : t('Charge the reactor'), text: drop.overdriveReady ? touch ? t('Tap Overdrive: lift the sphere and double collision payouts for three seconds. Two uses per machine.') : t('Press E or Overdrive: lift the sphere and double collision payouts for three seconds. Two uses per machine.') : t('Five different physical peg contacts charge Overdrive. Repeated hits and relic lightning do not add charge.'), action: 'overdrive' }
+    return { step: 2, title: t('Try steering the fall'), text: touch ? t('You used the reactor. Try a Nudge button to move toward the next useful lane.') : t('You used the reactor. Try A / D or a Nudge button to move toward the next useful lane.'), action: 'nudge' }
   }
 
   private view(): ViewModel {
@@ -1886,6 +1909,7 @@ export class Game {
       this.save.settings.quality,
       JSON.stringify(this.save.finish),
       this.questKey(),
+      locale(),
     ]
     return base.join('|')
   }
@@ -1898,7 +1922,7 @@ export class Game {
     const drop = this.drop
     const live = this.screen === 'aim' || this.screen === 'drop'
     const start = this.run.profile.startMult
-    const gate = drop.board.shutterY != null ? `Gate ${drop.gapT < 0.5 ? 'left' : 'right'} · gold ${drop.board.goldSide}` : ''
+    const gate = drop.board.shutterY != null ? t('Gate {gate} · gold {side}', { gate: t(drop.gapT < 0.5 ? 'left' : 'right'), side: t(drop.board.goldSide) }) : ''
     return {
       gears: this.run.gears,
       score: this.run.score,
@@ -1917,26 +1941,26 @@ export class Game {
       nudgeCooldown: drop.nudgeCd,
       specials: this.run.profile.special === 'tilt' ? drop.tilts : drop.specials,
       maxSpecials: this.run.profile.special === 'tilt' ? this.run.profile.tiltCharges : this.run.profile.specialCharges,
-      specialName: ballById(this.run.ballId).specialName,
+      specialName: t(ballById(this.run.ballId).specialName),
       specialCooldown: drop.specialCd,
       tilts: drop.tilts,
       maxTilts: this.run.profile.special === 'tilt' ? 0 : this.run.profile.tiltCharges,
       flips: drop.flips,
       showFlip: drop.board.shutterY != null,
       seed: this.run.seed,
-      kicker: this.run.nodes[this.run.nodeId]?.kicker ?? '',
-      title: this.run.depthTitle,
+      kicker: t(this.run.nodes[this.run.nodeId]?.kicker ?? ''),
+      title: t(this.run.depthTitle),
       blurb: this.coach(),
       gate: this.screen === 'pause' || this.screen === 'runend' ? '' : gate,
-      synergy: this.run.profile.synergies[0]?.name ?? '',
-      core: drop.board.boss ? `Strike the core · ${drop.coreHits}/5` : '',
-      jackpot: drop.board.jackpot && !drop.board.boss ? 'Center jackpots at ×3' : '',
+      synergy: t(this.run.profile.synergies[0]?.name ?? ''),
+      core: drop.board.boss ? t('Strike the core · {n}/5', { n: drop.coreHits }) : '',
+      jackpot: drop.board.jackpot && !drop.board.boss ? t('Center jackpots at ×3') : '',
       muted: this.sfx.isMuted,
       aiming: this.screen === 'aim',
       playing: this.screen === 'aim' || this.screen === 'drop',
-      journey: this.practice ? `Practice · attempt ${this.practice.attempt} · Trial ${this.run.ascension}` : `Circuit ${this.run.loop + 1} · machine ${this.run.nodes[this.run.nodeId]?.depth ?? 1} · Trial ${this.run.ascension}`,
+      journey: this.practice ? t('Practice · attempt {n} · Trial {trial}', { n: this.practice.attempt, trial: this.run.ascension }) : t('Circuit {circuit} · machine {machine} · Trial {trial}', { circuit: this.run.loop + 1, machine: this.run.nodes[this.run.nodeId]?.depth ?? 1, trial: this.run.ascension }),
       objective: this.objectiveLine(),
-      anomaly: this.nodeAnomaly(this.run.nodes[this.run.nodeId]) ? ANOMALIES[this.nodeAnomaly(this.run.nodes[this.run.nodeId])!].name : '',
+      anomaly: this.nodeAnomaly(this.run.nodes[this.run.nodeId]) ? t(ANOMALIES[this.nodeAnomaly(this.run.nodes[this.run.nodeId])!].name) : '',
       charge: drop.charge,
       overdriveTime: drop.overdriveTime,
       overdriveUses: Math.max(0, drop.profile.overdriveMax - drop.overdriveUses),
@@ -1961,12 +1985,12 @@ export class Game {
           kind: 'hub',
           balls: BALL_LIST.map((ball) => ({
             id: ball.id,
-            name: ball.name,
-            tagline: ball.tagline,
-            tags: ball.tags.join(' · '),
+            name: t(ball.name),
+            tagline: t(ball.tagline),
+            tags: ball.tags.map(tag => t(tag)).join(' · '),
             colors: ((f) => f ? [f.accent, f.color, f.core] as [string, string, string] : [ball.accent, ball.color, ball.core] as [string, string, string])(finishFor(ball.id, this.save.finish[ball.id], this.sphereLevel(ball.id))),
             locked: !this.save.balls.includes(ball.id) && this.sharedBall !== ball.id,
-            reason: ball.id === 'prism' ? 'Awakens after your first fall.' : 'Reach the Gravity Core, or finish two falls.',
+            reason: ball.id === 'prism' ? t('Awakens after your first fall.') : t('Reach the Gravity Core, or finish two falls.'),
             selected: (this.sharedBall || this.save.ball) === ball.id,
           })),
           shards: this.save.shards,
@@ -1980,9 +2004,9 @@ export class Game {
           confirm: this.replaceArmed,
           trial: this.draftAscension,
           maxTrial: Math.max(this.draftAscension, this.save.mastery[this.sharedBall || this.save.ball] ?? 0),
-          trialText: ASCENSIONS[this.draftAscension],
+          trialText: t(ASCENSIONS[this.draftAscension]),
           dailyDate: dailyExpedition().date,
-          dailySphere: ballById(dailyExpedition().ballId).name,
+          dailySphere: t(ballById(dailyExpedition().ballId).name),
           dailyBest: this.save.dailyBest[`${dailyExpedition().date}@${CURRENT_RULES}`] ?? 0,
           shared: !!this.sharedBall || this.sharedDaily,
           legacy: this.sharedRules === 2 && (!!this.sharedBall || this.sharedDaily),
@@ -1996,8 +2020,8 @@ export class Game {
             const maxed = level >= node.max
             const cost = maxed ? 0 : starCost(node, level)
             return {
-              id: node.id, name: node.name, glyph: node.glyph, level, max: Number.isFinite(node.max) ? node.max : 0,
-              text: node.text(Math.max(1, level)), next: maxed ? '' : node.text(level + 1),
+              id: node.id, name: t(node.name), glyph: node.glyph, level, max: Number.isFinite(node.max) ? node.max : 0,
+              text: t(node.text(Math.max(1, level))), next: maxed ? '' : t(node.text(level + 1)),
               cost, maxed, afford: !maxed && this.save.stardust >= cost, endless: !Number.isFinite(node.max),
             }
           }),
@@ -2020,15 +2044,17 @@ export class Game {
           large: this.save.settings.large,
           volume: this.save.settings.volume,
           speed: this.save.settings.speed,
+          lang: locale(),
+          langs: LOCALES.map(l => ({ id: l.id, name: l.name })),
         }
       case 'choices':
         return {
           kind: 'choices',
-          kicker: this.drafting ? `Circuit ${(run?.loop ?? 0) + 1} · ${run?.mode === 'daily' ? 'Daily constellation' : 'Expedition'}` : this.offers[0]?.kind === 'relic' ? 'A relic' : 'An upgrade',
-          title: this.drafting ? this.draftTitle : this.offers[0]?.kind === 'relic' ? 'Keep one passenger' : 'Change the sphere',
+          kicker: this.drafting ? t('Circuit {n} · {mode}', { n: (run?.loop ?? 0) + 1, mode: run?.mode === 'daily' ? t('Daily constellation') : t('Expedition') }) : this.offers[0]?.kind === 'relic' ? t('A relic') : t('An upgrade'),
+          title: this.drafting ? this.draftHeading() : this.offers[0]?.kind === 'relic' ? t('Keep one passenger') : t('Change the sphere'),
           build: this.buildLine(),
           cards: this.choiceCards(false),
-          skip: this.drafting ? 'Trust the bare sphere' : run && run.ascension >= 11 ? 'Skip this reward' : 'Take 15 gears instead',
+          skip: this.drafting ? t('Trust the bare sphere') : run && run.ascension >= 11 ? t('Skip this reward') : t('Take 15 gears instead'),
         }
       case 'shop':
         return {
@@ -2044,24 +2070,24 @@ export class Game {
       case 'fork':
         return {
           kind: 'fork',
-          title: run?.nodes[run.nodeId]?.title ?? 'Choose',
-          options: (run?.nodes[run.nodeId]?.options ?? []).map((o, index) => ({ ...o, index })),
+          title: t(run?.nodes[run.nodeId]?.title ?? 'Choose'),
+          options: (run?.nodes[run.nodeId]?.options ?? []).map((o, index) => ({ ...o, title: t(o.title), detail: t(o.detail), index })),
         }
       case 'repair':
         return {
           kind: 'repair',
           text:
             run && run.integrity < run.integrityMax
-              ? this.repairAmount() >= 99 ? 'The keeper restores your entire shell before the next act.' : `Restore up to ${this.repairAmount()} shell.`
-              : 'The shell is whole. The bench offers 12 gears of scrap instead.',
-          action: run && run.integrity < run.integrityMax ? this.repairAmount() >= 99 ? 'Restore the whole shell' : 'Mend the shell' : 'Take the scrap',
+              ? this.repairAmount() >= 99 ? t('The keeper restores your entire shell before the next act.') : t('Restore up to {n} shell.', { n: this.repairAmount() })
+              : t('The shell is whole. The bench offers 12 gears of scrap instead.'),
+          action: run && run.integrity < run.integrityMax ? this.repairAmount() >= 99 ? t('Restore the whole shell') : t('Mend the shell') : t('Take the scrap'),
         }
       case 'bargain':
         return { kind: 'bargain', canShell: !!run && run.integrity > 1, canPay: !!run && run.gears >= 30 }
       case 'resolve': {
         const d = this.drop
         const tone = !d ? 'good' : d.dead || d.captured === 'hazard' ? 'bad' : d.jackpot || d.wonBoss ? 'gold' : 'good'
-        return { kind: 'resolve', title: this.resolveCopy.title, sub: this.resolveCopy.sub, earned: d?.earned ?? 0, tone }
+        return { kind: 'resolve', title: t(this.resolveCopy.title), sub: this.resolveCopy.sub, earned: d?.earned ?? 0, tone }
       }
       case 'pause':
         return { kind: 'pause', practice: !!this.practice, canSave: !!this.run && !this.practice }
@@ -2072,7 +2098,7 @@ export class Game {
       case 'journal':
         return this.journalStage()
       case 'history':
-        return { kind: 'history', records: this.save.history.map((r, index) => ({ seed: r.seed, sphere: ballById(r.ballId).name, score: r.score, drops: r.drops, clears: r.clears, mode: r.mode === 'daily' ? 'Daily' : 'Expedition', date: r.date.slice(0, 10), trial: r.ascension, index, build: [...r.relics.map(id => RELICS[id]?.name), ...r.upgrades.map(id => UPGRADES[id]?.name)].filter(Boolean).join(' · ') })) }
+        return { kind: 'history', records: this.save.history.map((r, index) => ({ seed: r.seed, sphere: t(ballById(r.ballId).name), score: r.score, drops: r.drops, clears: r.clears, mode: r.mode === 'daily' ? t('Daily') : t('Expedition'), date: r.date.slice(0, 10), trial: r.ascension, index, build: [...r.relics.map(id => RELICS[id]?.name), ...r.upgrades.map(id => UPGRADES[id]?.name)].filter((name): name is string => !!name).map(name => t(name)).join(' · ') })) }
       case 'runend':
         return this.summary ? { kind: 'runend', summary: this.summary } : { kind: 'none' }
       case 'reveal':
@@ -2094,7 +2120,7 @@ export class Game {
     const daily = questDefs('daily', this.save.daily.key)
     const weekly = questDefs('weekly', this.save.weekly.key)
     return {
-      level: this.save.level, title: rankTitle(this.save.level),
+      level: this.save.level, title: t(rankTitle(this.save.level)),
       xpT: clamp(this.save.xp / rankXp(this.save.level), 0, 1),
       xp: this.save.xp, xpNext: rankXp(this.save.level),
       stardust: this.save.stardust,
@@ -2104,7 +2130,7 @@ export class Game {
       deepest: this.save.deepest[ball] ?? 0,
       chartOn: this.save.chartOn,
       chartLevels: Object.values(this.save.chart).reduce((a, b) => a + b, 0),
-      finishes: (FINISHES[ball] ?? []).map(f => ({ id: f.id, name: f.name, level: f.level, color: f.color, accent: f.accent, core: f.core, unlocked: f.level <= level, selected: (finishFor(ball, this.save.finish[ball], level)?.id ?? '') === f.id })),
+      finishes: (FINISHES[ball] ?? []).map(f => ({ id: f.id, name: t(f.name), level: f.level, color: f.color, accent: f.accent, core: f.core, unlocked: f.level <= level, selected: (finishFor(ball, this.save.finish[ball], level)?.id ?? '') === f.id })),
     }
   }
 
@@ -2113,7 +2139,7 @@ export class Game {
     const book = (kind: 'daily' | 'weekly') => {
       const b = kind === 'daily' ? this.save.daily : this.save.weekly
       const reward = kind === 'daily' ? DAILY_QUEST_REWARD : WEEKLY_QUEST_REWARD
-      return questDefs(kind, b.key).map(q => ({ text: q.text, value: Math.min(q.target, b.progress[q.id] ?? 0), target: q.target, done: b.claimed.includes(q.id), reward: `+${reward.dust} stardust · +${reward.xp} XP` }))
+      return questDefs(kind, b.key).map(q => ({ text: t(q.text), value: Math.min(q.target, b.progress[q.id] ?? 0), target: q.target, done: b.claimed.includes(q.id), reward: t('+{dust} stardust · +{xp} XP', { dust: reward.dust, xp: reward.xp }) }))
     }
     const values: Record<string, number> = {
       pegs: this.save.lifetime.pegs, golds: this.save.lifetime.golds, machines: this.save.lifetime.machines,
@@ -2129,7 +2155,7 @@ export class Game {
       feats: FEATS.map(def => {
         const tier = this.save.feats[def.id] ?? 0
         const target = def.target(tier)
-        return { name: `${def.name} ${toRoman(tier + 1)}`, text: def.text(target), value: Math.min(target, values[def.id] ?? 0), target, tier, reward: featReward(tier) }
+        return { name: `${t(def.name)} ${toRoman(tier + 1)}`, text: t(def.text(target)), value: Math.min(target, values[def.id] ?? 0), target, tier, reward: featReward(tier) }
       }),
     }
   }
@@ -2139,33 +2165,33 @@ export class Game {
     return {
       kind: 'collection',
       balls: BALL_LIST.map((ball) => ({
-        name: ball.name,
+        name: t(ball.name),
         text: this.save.balls.includes(ball.id)
-          ? `${ball.tagline} ${ball.specialText}`
+          ? `${t(ball.tagline)} ${t(ball.specialText)}`
           : ball.id === 'prism'
-            ? 'Awakens after your first fall.'
-            : 'Reach the Gravity Core, or finish two falls.',
+            ? t('Awakens after your first fall.')
+            : t('Reach the Gravity Core, or finish two falls.'),
         known: true,
       })),
       relics: Object.values(RELICS).map((relic) => {
         const researched = knownRelics.has(relic.id)
         const seen = this.save.seenRelics.includes(relic.id)
-        if (!researched) return { name: relic.name, text: relic.lockHint || 'Locked schematic.', known: false }
-        if (!seen) return { name: relic.name, text: 'In the machine. Not yet offered.', known: false }
+        if (!researched) return { name: t(relic.name), text: relic.lockHint ? t(relic.lockHint) : t('Locked schematic.'), known: false }
+        if (!seen) return { name: t(relic.name), text: t('In the machine. Not yet offered.'), known: false }
         const sticker = this.save.stickers[relic.id]
-        return { name: sticker ? `${relic.name} · won at Trial ${sticker - 1}` : relic.name, text: relic.text, known: true }
+        return { name: sticker ? t('{name} · won at Trial {n}', { name: t(relic.name), n: sticker - 1 }) : t(relic.name), text: t(relic.text), known: true }
       }),
       parts: PARTS.map((part) => ({
-        name: part.name,
-        text: this.save.seenParts.includes(part.id) ? part.about : 'Still inside the machine.',
+        name: t(part.name),
+        text: this.save.seenParts.includes(part.id) ? t(part.about) : t('Still inside the machine.'),
         known: this.save.seenParts.includes(part.id),
       })),
       challenges: CHALLENGES.map((c) => ({
-        name: this.save.challenges.includes(c.id) ? `${c.name} · done` : c.name,
-        text: c.text,
+        name: this.save.challenges.includes(c.id) ? t('{name} · done', { name: t(c.name) }) : t(c.name),
+        text: t(c.text),
         known: true,
       })),
-      lore: this.save.lore.map((id) => LORE[id]).filter(Boolean),
+      lore: this.save.lore.map((id) => LORE[id]).filter(Boolean).map(text => t(text)),
       pegs: this.save.lifetime.pegs,
     }
   }
@@ -2173,9 +2199,9 @@ export class Game {
   private objectiveLine(): string {
     const run = this.run
     if (!run) return ''
-    if (this.practice) return 'Practice only · archive and expedition preserved'
+    if (this.practice) return t('Practice only · archive and expedition preserved')
     const next = COMMISSIONS.find(c => run.commissions.includes(c.id) && !run.claimed.includes(c.id))
-    return next ? `${next.name}: ${Math.min(next.target, run[next.stat])}/${next.target} · +${next.gears} gears` : 'All commissions fulfilled · a beautiful descent'
+    return next ? t('{name}: {value}/{target} · +{gears} gears', { name: t(next.name), value: Math.min(next.target, run[next.stat]), target: next.target, gears: next.gears }) : t('All commissions fulfilled · a beautiful descent')
   }
 
   private nodeAnomaly(node: GameNode): keyof typeof ANOMALIES | undefined {
@@ -2192,21 +2218,30 @@ export class Game {
     if (!run) return { kind: 'none' }
     const current = run.nodes[run.nodeId]
     return {
-      kind: 'journal', title: ballById(run.ballId).name,
+      kind: 'journal', title: t(ballById(run.ballId).name),
       canSave: !this.practice && (this.leaveFrom() === 'drop' || CHECKPOINT_SCREENS.includes(this.leaveFrom())),
       practice: !!this.practice,
-      stats: `${this.practice ? 'Practice · ' : ''}${run.rules === 2 ? 'Classic route · ' : ''}Circuit ${run.loop + 1} · Trial ${run.ascension} · ${run.integrity}/${run.integrityMax} shell · ${run.gears} gears · Seed ${run.seed}`,
+      stats: [
+        this.practice ? t('Practice') : '',
+        run.rules === 2 ? t('Classic route') : '',
+        t('Circuit {n}', { n: run.loop + 1 }),
+        t('Trial {n}', { n: run.ascension }),
+        t('{shell}/{max} shell', { shell: run.integrity, max: run.integrityMax }),
+        t('{n} gears', { n: run.gears }),
+        t('Seed {seed}', { seed: run.seed }),
+      ].filter(Boolean).join(' · '),
       encounter: this.encounterModel(),
-      commissions: COMMISSIONS.filter(c => run.commissions.includes(c.id)).map(c => ({ name: c.name, text: `${c.text} +${c.gears} gears.`, value: run[c.stat], target: c.target, done: run.claimed.includes(c.id) })),
-      relics: run.relics.map(id => ({ name: RELICS[id].name, text: RELICS[id].text, known: true })),
-      upgrades: run.upgrades.map(id => ({ name: UPGRADES[id].name, text: UPGRADES[id].text, known: true })),
-      synergies: run.profile.synergies.map(s => ({ name: `${s.name} · ${s.count} tags`, text: s.blurb, known: true })),
+      commissions: COMMISSIONS.filter(c => run.commissions.includes(c.id)).map(c => ({ name: t(c.name), text: t('{text} +{n} gears.', { text: t(c.text), n: c.gears }), value: run[c.stat], target: c.target, done: run.claimed.includes(c.id) })),
+      relics: run.relics.map(id => ({ name: t(RELICS[id].name), text: t(RELICS[id].text), known: true })),
+      upgrades: run.upgrades.map(id => ({ name: t(UPGRADES[id].name), text: t(UPGRADES[id].text), known: true })),
+      synergies: run.profile.synergies.map(s => ({ name: t('{name} · {n} tags', { name: t(s.name), n: s.count }), text: t(s.blurb), known: true })),
       route: Object.values(run.nodes).sort((a, b) => a.sector - b.sector || a.depth - b.depth).map(node => ({
-        id: node.id, title: node.title, kind: node.encounter ? 'Guardian · optional relic' : node.kind === 'drop' ? node.reward ? `Machine · ${node.reward}` : 'Machine · gears' : node.kind,
+        // Kinds are whole dictionary keys so the UI can recover the English kind with source().
+        id: node.id, title: t(node.title), kind: node.encounter ? t('Guardian · optional relic') : node.kind === 'drop' ? node.reward ? t(node.reward === 'relic' ? 'Machine · relic' : 'Machine · upgrade') : t('Machine · gears') : t(node.kind),
         act: node.sector, depth: node.depth,
         status: node.id === run.nodeId ? 'current' : run.visited.includes(node.id) ? 'visited' : node.depth < current.depth ? 'alternative' : 'future',
-        detail: [node.blurb, node.kind === 'drop' && this.nodeAnomaly(node) ? `${ANOMALIES[this.nodeAnomaly(node)!].name}: ${ANOMALIES[this.nodeAnomaly(node)!].description}` : ''].filter(Boolean).join(' '),
-        next: node.options ? node.options.map(o => run.nodes[o.next]?.title ?? o.title).join(' / ') : node.next ? run.nodes[node.next]?.title ?? '' : 'Bank victory or enter the next circuit',
+        detail: [t(node.blurb), node.kind === 'drop' && this.nodeAnomaly(node) ? `${t(ANOMALIES[this.nodeAnomaly(node)!].name)}: ${t(ANOMALIES[this.nodeAnomaly(node)!].description)}` : ''].filter(Boolean).join(' '),
+        next: node.options ? node.options.map(o => t(run.nodes[o.next]?.title ?? o.title)).join(' / ') : node.next ? t(run.nodes[node.next]?.title ?? '') : t('Bank victory or enter the next circuit'),
         nextIds: node.options ? node.options.map(o => o.next) : node.next ? [node.next] : [],
       })),
     }
@@ -2214,10 +2249,10 @@ export class Game {
 
   private studyLabel(): string {
     const next = this.nextSchematic()
-    if (next) return `${this.save.shards}/${this.researchCost()} shards · ${next.name}`
-    const trail = TRAILS.find((t) => !this.save.trails.includes(t.id))
-    if (trail) return this.save.shards >= TUNING.trailCost ? `Cast ${trail.name}` : `${this.save.shards}/${TUNING.trailCost} · ${trail.name}`
-    return 'Archive complete'
+    if (next) return t('{shards}/{cost} shards · {name}', { shards: this.save.shards, cost: this.researchCost(), name: t(next.name) })
+    const trail = TRAILS.find((trail) => !this.save.trails.includes(trail.id))
+    if (trail) return this.save.shards >= TUNING.trailCost ? t('Cast {name}', { name: t(trail.name) }) : `${this.save.shards}/${TUNING.trailCost} · ${t(trail.name)}`
+    return t('Archive complete')
   }
 
   private canStudy(): boolean {
@@ -2234,13 +2269,13 @@ export class Game {
       this.replaceArmed = act
       this.selectedPulse++
       this.sfx.ui()
-      this.say(REPLACE_PROMPT, 'Tap again to start over. The saved expedition will be lost.', 2.5, false)
+      this.say(t(REPLACE_PROMPT), t('Tap again to start over. The saved expedition will be lost.'), 2.5, false)
       return
     }
     if (this.replaceArmed) {
       this.replaceArmed = ''
       this.selectedPulse++
-      if (this.toast?.title === REPLACE_PROMPT) { this.toast = null; this.toastT = 0 }
+      if (this.toast && source(this.toast.title) === REPLACE_PROMPT) { this.toast = null; this.toastT = 0 }
     }
     if (act === 'laboratory' && this.screen === 'hub') { this.openLaboratory(); return }
     if (act === 'practice-last' && this.screen === 'runend' && this.summary?.debrief && this.lastMachine) { this.openLaboratory(true); return }
@@ -2262,7 +2297,7 @@ export class Game {
       writeSave(this.save)
       this.clearControls()
       this.toHub()
-      this.say('Workshop tips enabled', 'Your next Workshop will guide release, nudging, and Overdrive.', 2, false)
+      this.say(t('Workshop tips enabled'), t('Your next Workshop will guide release, nudging, and Overdrive.'), 2, false)
       return
     }
     if (act === 'overview') { this.toggleOverview(); return }
@@ -2339,7 +2374,7 @@ export class Game {
     }
     if (act.startsWith('share:')) {
       const record = this.save.history[Number(act.slice(6))]
-      if (record) this.copyText(challengeUrl(shareBase(), record), 'Challenge copied')
+      if (record) this.copyText(challengeUrl(shareBase(), record), t('Challenge copied'))
       return
     }
     if (act === 'bank') { if (this.screen === 'victory') this.endRun(true); return }
@@ -2404,7 +2439,7 @@ export class Game {
       if (!saved) return
       this.suspended = saved
       this.toHub()
-      this.say('Expedition saved', from === 'drop' ? 'Continue restarts this machine from its launch.' : 'Continue from the hub whenever you are ready.', 2, false)
+      this.say(t('Expedition saved'), from === 'drop' ? t('Continue restarts this machine from its launch.') : t('Continue from the hub whenever you are ready.'), 2, false)
       return
     }
     if (act === 'abandon') {
@@ -2452,7 +2487,7 @@ export class Game {
         const next = this.nextSchematic()
         this.summary.temptation = this.temptation([], next)
         this.summary.canStudy = this.canStudy()
-        this.summary.studyLabel = next ? `Study · ${next.lockHint}` : this.studyLabel()
+        this.summary.studyLabel = next ? t('Study · {hint}', { hint: t(next.lockHint) }) : this.studyLabel()
       }
       this.selectedPulse++
       return
@@ -2461,8 +2496,8 @@ export class Game {
       const seed = this.run?.seed || this.summary?.seed || this.draftSeed
       if (!seed) return
       void navigator.clipboard?.writeText(seed).then(
-        () => this.say('Seed copied', seed, 0.8, false),
-        () => this.say(seed, 'Copy it from here.', 1.2, false),
+        () => this.say(t('Seed copied'), seed, 0.8, false),
+        () => this.say(seed, t('Copy it from here.'), 1.2, false),
       )
       return
     }
@@ -2470,8 +2505,18 @@ export class Game {
       const run = this.run
       if (!run) return
       const link = challengeUrl(shareBase(), run)
-      const result = `PLUMB ✧ ${run.score.toLocaleString()} · ${ballById(run.ballId).name} · Trial ${run.ascension}\n${run.clears} circuit${run.clears === 1 ? '' : 's'} cleared · ${run.bestCombo} best combo · ${run.claimed.length}/3 commissions\n${run.relics.map(id => RELICS[id].name).join(' + ')}\n${link}`
-      this.copyText(act === 'copy-result' ? result : link, act === 'copy-result' ? 'Result copied' : 'Challenge copied')
+      const result = [
+        `PLUMB ✧ ${run.score.toLocaleString()} · ${t(ballById(run.ballId).name)} · ${t('Trial {n}', { n: run.ascension })}`,
+        t(run.clears === 1 ? '{n} circuit cleared · {combo} best combo · {claimed}/3 commissions' : '{n} circuits cleared · {combo} best combo · {claimed}/3 commissions', { n: run.clears, combo: run.bestCombo, claimed: run.claimed.length }),
+        run.relics.map(id => t(RELICS[id].name)).join(' + '),
+        link,
+      ].join('\n')
+      this.copyText(act === 'copy-result' ? result : link, act === 'copy-result' ? t('Result copied') : t('Challenge copied'))
+      return
+    }
+    if (act.startsWith('lang:')) {
+      const next = act.slice(5)
+      if (isLocale(next)) { setLocale(next); this.sfx.ui(); this.selectedPulse++ }
       return
     }
     if (act.startsWith('speed:')) {
@@ -2529,8 +2574,8 @@ export class Game {
   }
 
   private copyText(value: string, title: string): void {
-    if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(value).then(() => this.say(title, 'Ready to share.', 1.2, false), () => this.say('Clipboard unavailable', 'Use the seed from your journal or logbook.', 2, false))
-    else this.say('Clipboard unavailable', 'Use the seed from your journal or logbook.', 2, false)
+    if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(value).then(() => this.say(title, t('Ready to share.'), 1.2, false), () => this.say(t('Clipboard unavailable'), t('Use the seed from your journal or logbook.'), 2, false))
+    else this.say(t('Clipboard unavailable'), t('Use the seed from your journal or logbook.'), 2, false)
   }
 
   private debug(): void {
