@@ -306,6 +306,99 @@ test('browser and system back step out of every screen like its on-screen contro
   await expect(page).not.toHaveURL(/seed=/)
 })
 
+/**
+ * Mirrors Tauri's Android AppPlugin back handler (tauri 2.12 AppPlugin.kt): with no JS listener it calls
+ * WebView.goBack() when the WebView can go back, and otherwise hands back to the activity, which leaves the app.
+ * A test page keeps an about:blank entry the app's WebView never has, so `launch` marks the app's first entry.
+ */
+function androidShell(page: Page) {
+  let floor = 0
+  const history = async () => {
+    const cdp = await page.context().newCDPSession(page)
+    try { return { cdp, ...(await cdp.send('Page.getNavigationHistory')) } } catch (error) { await cdp.detach(); throw error }
+  }
+  return {
+    /** Treats the current page entry (under any back guard) as the WebView's first entry. */
+    async launch() {
+      const { cdp, currentIndex } = await history()
+      await cdp.detach()
+      const guarded = await page.evaluate(() => (window.history.state as { plumbBack?: boolean } | null)?.plumbBack === true)
+      floor = currentIndex - (guarded ? 1 : 0)
+    },
+    async back(): Promise<'in-app' | 'exit'> {
+      const { cdp, currentIndex, entries } = await history()
+      try {
+        if (currentIndex <= floor) return 'exit'
+        await cdp.send('Page.navigateToHistoryEntry', { entryId: entries[currentIndex - 1].id })
+        return 'in-app'
+      } finally {
+        await cdp.detach()
+      }
+    },
+  }
+}
+
+test('Android back stays in the game everywhere off the hub and leaves the app from the hub', async ({ page }, info) => {
+  test.skip(info.project.name !== 'phone-chromium', 'Android WebView behaviour is modelled on the phone Chromium project')
+  const mode = page.locator('#app')
+  const android = androidShell(page)
+  await page.goto(`/?seed=${seed}`)
+  await android.launch()
+  expect(await android.back()).toBe('exit')
+
+  for (const name of ['settings', 'stars', 'quests']) {
+    await action(page, name).click()
+    await expect(page.locator('.screen-head .back')).toBeVisible()
+    expect(await android.back()).toBe('in-app')
+    await expect(action(page, 'start')).toBeVisible()
+    await backSettled(page)
+    expect(await android.back()).toBe('exit')
+  }
+
+  await action(page, 'start').click()
+  await expect(mode).toHaveAttribute('data-mode', 'choices')
+  expect(await android.back()).toBe('in-app')
+  await expect(mode).toHaveAttribute('data-mode', 'journal')
+  expect(await android.back()).toBe('in-app')
+  await expect(mode).toHaveAttribute('data-mode', 'choices')
+  await action(page, 'pick:0').click()
+  await expect(mode).toHaveAttribute('data-mode', 'aim')
+  expect(await android.back()).toBe('in-app')
+  await expect(mode).toHaveAttribute('data-mode', 'pause')
+  expect(await android.back()).toBe('in-app')
+  await expect(mode).toHaveAttribute('data-mode', 'aim')
+
+  // Switching away from the app pauses the machine; back on return resumes it rather than leaving.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await expect(mode).toHaveAttribute('data-mode', 'pause')
+  expect(await android.back()).toBe('in-app')
+  await expect(mode).toHaveAttribute('data-mode', 'aim')
+
+  // Save & go home lands on a hub with nothing behind it, so one more back leaves the app.
+  expect(await android.back()).toBe('in-app')
+  await action(page, 'save-exit').click()
+  await expect(action(page, 'continue-run')).toBeVisible()
+  await backSettled(page)
+  expect(await android.back()).toBe('exit')
+
+  // A finished expedition backs out to the hub, then out of the app.
+  await room(page, 'fork-lane', 'aim')
+  await android.launch()
+  expect(await android.back()).toBe('in-app')
+  await expect(mode).toHaveAttribute('data-mode', 'pause')
+  await action(page, 'abandon').click()
+  await expect(mode).toHaveAttribute('data-mode', 'runend')
+  expect(await android.back()).toBe('in-app')
+  await expect(action(page, 'start')).toBeVisible()
+  await backSettled(page)
+  expect(await android.back()).toBe('exit')
+})
+
 test('forks, events, shop and victory have readable working decision screens', async ({ page }, info) => {
   for (const [id, screen] of [['fork-lane', 'fork'], ['salvage', 'event'], ['shop-brass', 'shop'], ['rest-brass', 'repair'], ['bargain', 'bargain'], ['grinder', 'victory']]) {
     await room(page, id, screen)
