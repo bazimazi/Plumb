@@ -38,7 +38,7 @@ function mountWindow(url: string) {
   Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, value: () => {} })
   const copied: string[] = []
   Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied.push(text) } } })
-  for (const name of ['window', 'document', 'navigator', 'location', 'localStorage', 'HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLCanvasElement', 'Element', 'Node', 'Event', 'KeyboardEvent', 'MouseEvent', 'InputEvent']) {
+  for (const name of ['window', 'document', 'navigator', 'location', 'history', 'localStorage', 'HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLCanvasElement', 'Element', 'Node', 'Event', 'KeyboardEvent', 'MouseEvent', 'InputEvent']) {
     setGlobal(name, name === 'window' ? window : (window as any)[name])
   }
   setGlobal('matchMedia', matchMedia)

@@ -129,6 +129,10 @@ export class Game {
   private draftTitle = ''
   private journalReturn = 'aim'
   private pausedFrom = 'aim'
+  /** True while a history entry sits on top of the page entry to catch the system back gesture. */
+  private backGuard = false
+  /** True while our own history.back() is in flight to drop the guard. */
+  private backUnwinding = false
   private suspended: unknown = null
   private hubTick = 0
   private selectedPulse = 0
@@ -238,6 +242,18 @@ export class Game {
     document.documentElement.classList.toggle('lg', this.save.settings.large)
     this.resize()
     window.addEventListener('resize', () => this.resize())
+    // Browser back, Android back, PWA swipe-back and mouse back buttons all arrive as popstate.
+    // A reload keeps history.state, so the page can wake on an old guard. The entries under it belong
+    // to the previous document and stepping back would load the page again, so demote it to a plain entry.
+    if ((history.state as { plumbBack?: boolean } | null)?.plumbBack === true) history.replaceState(null, '')
+    window.addEventListener('popstate', (e) => {
+      const onGuard = (e.state as { plumbBack?: boolean } | null)?.plumbBack === true
+      if (this.backUnwinding) { this.backUnwinding = false; this.backGuard = onGuard; return }
+      // Forward navigation re-entered the guard; it is ours again.
+      if (onGuard) { this.backGuard = true; return }
+      this.backGuard = false
+      this.goBack()
+    })
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && (this.screen === 'aim' || this.screen === 'drop')) {
         this.pausedFrom = this.screen
@@ -316,6 +332,7 @@ export class Game {
     this.animate(dt)
     this.draw(t)
     this.ui.render(this.view())
+    this.syncBackGuard()
     this.debug()
     this.input.endFrame()
     requestAnimationFrame((n) => this.frame(n))
@@ -325,15 +342,7 @@ export class Game {
     const p = this.input.pressed
     if (p.has('Backquote') && this.dev) this.debugOpen = !this.debugOpen
     if (p.has('Escape')) {
-      this.clearControls()
-      if (this.screen === 'pause') this.screen = this.pausedFrom
-      else if (this.screen === 'aim' || this.screen === 'drop') {
-        this.pausedFrom = this.screen
-        this.screen = 'pause'
-      } else if (this.screen === 'journal') this.screen = this.journalReturn
-      else if (this.screen === 'reveal') this.onAction('close-reveal')
-      else if (this.screen === 'laboratory' || this.screen === 'practice-result') this.onAction('lab-exit')
-      else if (['help', 'collection', 'settings', 'history', 'stars', 'quests'].includes(this.screen)) this.onAction('back')
+      this.goBack()
       return
     }
     if (p.has('KeyJ') && this.run && this.screen !== 'runend') this.onAction('journal')
@@ -2565,6 +2574,50 @@ export class Game {
     }
     if (act === 'overdrive' && this.screen === 'drop') this.pending.overdrive = true
     if (act === 'skip-node' && this.dev) this.advance()
+  }
+
+  /**
+   * One step back. Escape, browser back, Android back and mouse back buttons all land here,
+   * so every screen backs out the same way its on-screen back or close control does.
+   * The hub has nowhere further in-game to go; there back belongs to the browser or OS.
+   */
+  private goBack(): void {
+    this.clearControls()
+    switch (this.screen) {
+      case 'hub': return
+      case 'aim':
+        if (this.overview) { this.toggleOverview(); return }
+        this.onAction('pause-btn')
+        return
+      case 'drop': this.onAction('pause-btn'); return
+      case 'pause': this.onAction('resume'); return
+      case 'journal': this.onAction('close-journal'); return
+      case 'reveal': this.onAction('close-reveal'); return
+      case 'laboratory': this.onAction('lab-exit'); return
+      case 'practice-result': this.onAction('lab-configure'); return
+      case 'runend': this.onAction('hub'); return
+      case 'help': case 'collection': case 'settings': case 'history': case 'stars': case 'quests':
+        this.onAction('back')
+        return
+      default:
+        // Decision rooms and the cash-out have no pause; the journal offers resume and save & exit.
+        if (this.run) this.onAction('journal')
+        else this.toHub()
+    }
+  }
+
+  /** Keeps exactly one history entry above the page while back has an in-game destination. */
+  private syncBackGuard(): void {
+    if (this.backUnwinding) return
+    const wanted = this.screen !== 'hub'
+    if (wanted && !this.backGuard) {
+      history.pushState({ plumbBack: true }, '')
+      this.backGuard = true
+    } else if (!wanted && this.backGuard) {
+      // Leave no stale entry behind, so back from the hub leaves the page or closes the app at once.
+      this.backUnwinding = true
+      history.back()
+    }
   }
 
   /** The run screen underneath any pause or journal overlay. */

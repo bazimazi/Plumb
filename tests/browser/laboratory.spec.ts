@@ -153,7 +153,8 @@ test('laboratory catalogue exposes eight machines and locked spheres without cha
   await readable(page)
   await capture(page, info, 'laboratory-large-type')
   expect(await storage(page)).toEqual(before)
-  await action(page, 'lab-exit').click()
+  // System back leaves the bench for the hub, like its header back control.
+  await page.goBack()
   await expect(mode(page)).toHaveAttribute('data-mode', 'hub')
   expect(await storage(page)).toEqual(before)
   await page.reload()
@@ -204,7 +205,8 @@ test('practice falls pause, report real results and retry deterministically whil
   expect(await reportValues(page)).toEqual(first)
   await expect(page.locator('.practice-comparison')).toContainText('0 gears versus your previous attempt')
   expect(await storage(page)).toEqual(before)
-  await action(page, 'lab-configure').click()
+  // System back from a result steps up to the bench, like its header back control.
+  await page.goBack()
   await page.clock.runFor(50)
   await expect(mode(page)).toHaveAttribute('data-mode', 'laboratory')
   await configure(page, 'gravity', 'void', 'resonance', true)

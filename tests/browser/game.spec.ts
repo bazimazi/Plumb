@@ -60,6 +60,11 @@ async function cleanLayout(page: Page) {
   expect(problems).toEqual([])
 }
 
+/** Waits for the game to drop its back-gesture history entry; navigating mid-unwind aborts the navigation. */
+async function backSettled(page: Page) {
+  await expect.poll(() => page.evaluate(() => (history.state as { plumbBack?: boolean } | null)?.plumbBack === true)).toBe(false)
+}
+
 async function start(page: Page) {
   await page.goto(`/?seed=${seed}`)
   await action(page, 'start').click()
@@ -243,6 +248,64 @@ test('limited controls spend their displayed charges through clicks and touch', 
   await capture(page, info, 'limited-controls-spent')
 })
 
+test('browser and system back step out of every screen like its on-screen control', async ({ page }) => {
+  const mode = page.locator('#app')
+  const guarded = () => page.evaluate(() => (history.state as { plumbBack?: boolean } | null)?.plumbBack === true)
+  // Menus draw over the attract machine, so the app mode stays 'hub'; the open screen is the article.
+  const menus: Record<string, string> = { settings: '.settings-screen', help: '.help-screen', collection: '.collection-screen', history: '.history-screen', stars: '.star-chart' }
+  await page.goto('/')
+  await page.goto(`/?seed=${seed}`)
+  for (const [name, screen] of Object.entries(menus)) {
+    await action(page, name).click()
+    await expect(page.locator(screen)).toBeVisible()
+    await page.goBack()
+    await expect(page.locator(screen)).toHaveCount(0)
+    await expect(action(page, 'start')).toBeVisible()
+  }
+  // Leaving through the on-screen control drops the guard, so the hub never needs two back presses.
+  await action(page, 'settings').click()
+  await expect.poll(guarded).toBe(true)
+  await action(page, 'back').click()
+  await expect(action(page, 'start')).toBeVisible()
+  await backSettled(page)
+
+  // Decision rooms have no pause; back opens the journal and back again returns to the room.
+  await action(page, 'start').click()
+  await expect(mode).toHaveAttribute('data-mode', 'choices')
+  await page.goBack()
+  await expect(mode).toHaveAttribute('data-mode', 'journal')
+  await page.goBack()
+  await expect(mode).toHaveAttribute('data-mode', 'choices')
+  await action(page, 'pick:0').click()
+  await expect(mode).toHaveAttribute('data-mode', 'aim')
+
+  // Inspect closes before the machine pauses; settings opened from pause return to pause.
+  await action(page, 'overview').click()
+  await expect(action(page, 'overview')).toHaveAttribute('aria-pressed', 'true')
+  await page.goBack()
+  await expect(action(page, 'overview')).toHaveAttribute('aria-pressed', 'false')
+  await expect(mode).toHaveAttribute('data-mode', 'aim')
+  await page.goBack()
+  await expect(mode).toHaveAttribute('data-mode', 'pause')
+  await action(page, 'settings').click()
+  await expect(page.locator('.settings-screen')).toBeVisible()
+  await page.goBack()
+  await expect(mode).toHaveAttribute('data-mode', 'pause')
+  await page.goBack()
+  await expect(mode).toHaveAttribute('data-mode', 'aim')
+  await page.keyboard.press('Escape')
+  await expect(mode).toHaveAttribute('data-mode', 'pause')
+  await page.keyboard.press('Escape')
+  await expect(mode).toHaveAttribute('data-mode', 'aim')
+
+  await page.keyboard.press('Escape')
+  await action(page, 'save-exit').click()
+  await expect(action(page, 'continue-run')).toBeVisible()
+  await backSettled(page)
+  await page.goBack()
+  await expect(page).not.toHaveURL(/seed=/)
+})
+
 test('forks, events, shop and victory have readable working decision screens', async ({ page }, info) => {
   for (const [id, screen] of [['fork-lane', 'fork'], ['salvage', 'event'], ['shop-brass', 'shop'], ['rest-brass', 'repair'], ['bargain', 'bargain'], ['grinder', 'victory']]) {
     await room(page, id, screen)
@@ -285,6 +348,7 @@ test('checkpoint survives reload and reduced motion plus large type stays readab
   await action(page, 'settings').click()
   await action(page, 'toggle:large').click()
   await action(page, 'back').click()
+  await backSettled(page)
   await cleanLayout(page)
   await start(page)
   await action(page, 'pick:0').click()
