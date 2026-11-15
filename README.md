@@ -11,6 +11,20 @@ PLUMB plays in **Persian (فارسی)** by default and in **English**. Switch in
 - To add a language, add a dictionary folder and register it in `LOCALES` and `DICTS` in `src/i18n/index.ts`.
 - `npm run verify:i18n` fails when a literal `t()` key has no Persian entry, when placeholders differ from the English, or when two dictionaries disagree. Headless checks and the existing browser tests run in English.
 
+## Targets and gears · v0.5
+
+Every fall now answers one question: **did you power the machine?**
+
+- **Score target:** each machine shows a target before release, in a title card and in the always-visible target meter. Peg, bumper, spring and relic payouts are **points**; reach the target in one fall to power the machine. Doubling and tripling it **overcharges** for extra gears. Landing safely short of it costs **one shell**. A gutter already costs shell, so it is never charged twice, and a target met before a gutter still pays. The Grinder has no score target; its meter tracks the five core seals instead.
+- **Overdrive has a job:** when a fall heads home short, the meter turns red, a single warning sounds, and the reactor control pulses. Firing it lifts the sphere back into the pegs for the points it still needs.
+- **Gears are a calm currency:** points no longer double as money. Gears come from landing pockets, powered and overcharged machines, guardian bounties (25 and 40), commissions, salvage from calm machines without a draft, and events. Shop prices (30 per upgrade, 50 per relic, +45% per act), repairs, bargains and events were rescaled so a careful act buys one or two parts, never the whole counter.
+- **Targets follow pressure:** a target grows with the machine's depth, layout, Trial and circuit, and ignores Star Chart yield, so permanent upgrades make targets easier. Values were fitted with simulated expeditions (`src/game/target.ts`): careless releases miss about one target in four, deliberate play rarely does. A human-like simulated player wins Trial 0 a little more than half the time, about a quarter of the time at Trial 6, and rarely at Trial 15.
+- **Choosing a path:** fork cards show the next machine's target and what surviving it pays, and each machine's title card repeats its reward, so risk is weighed with real numbers.
+- **Reading the result:** each landing shows the fall's score against its target and an itemised gear ledger (pocket, target bonus, overcharge, bounty, commission, salvage). Gears fly from the landing into the wallet.
+- **Presentation:** machines slide in with a title card (act, name, target, anomaly). Struck pegs recoil on springs, score popups pop and glow with the chain, and target, overcharge and shortfall each have their own burst, sound and haptic cue. Decision rooms keep shell, gears and score visible. The desktop hub is a two-column showcase and play desk; run results put Play again above the fold.
+
+`npm run verify:builds` covers the target rules: one announcement, two overcharge tiers, flat gear payouts, exactly one shell for a short landing, no double charge on gutters, no target on the Grinder, and targets that rise with depth, Trial and circuit.
+
 ## The long game · v0.2
 
 PLUMB now rewards every expedition, keeps difficulty rising without a ceiling, and treats the phone as the primary device.
@@ -53,8 +67,8 @@ Choose **Practice the last machine** from that analysis to repeat its exact boar
 
 Two optional physical objectives now change the problem inside existing machines:
 
-- **The Bellkeeper**, in Act I's gallery or kiln, asks you to strike three bells in any order. Credited bells retract. Linking all three pays **70 gears** and opens a relic draft if you survive. The riskier kiln retains its guaranteed surviving relic even when the bells are unfinished; completion adds the gear bounty, rather than a second relic.
-- **The Heartforge**, in Act II's dynamo, asks for **I → II → I → II** across its left and right relays. Completing the sequence pays **120 gears** and opens a relic draft if you survive. The HUD shows the next valid target.
+- **The Bellkeeper**, in Act I's gallery or kiln, asks you to strike three bells in any order. Credited bells retract. Linking all three pays **25 gears** and opens a relic draft if you survive. The riskier kiln retains its guaranteed surviving relic even when the bells are unfinished; completion adds the gear bounty, rather than a second relic.
+- **The Heartforge**, in Act II's dynamo, asks for **I → II → I → II** across its left and right relays. Completing the sequence pays **40 gears** and opens a relic draft if you survive. The HUD shows the next valid target.
 
 An unfinished guardian allows **one automatic return from a safe collector before 75 seconds of simulation time**. Progress, shell, earned gears, and remaining controls carry over; the return awards no landing payout and restores no resources. Hazard gutters still follow normal damage rules and cannot trigger this return, even when shielded. After the return is spent, its time window expires, or the objective is completed, collectors settle normally. An incomplete guardian never blocks normal route progression if you survive.
 
@@ -138,7 +152,8 @@ Set `PLUMB_TEST_LIGHT=1` when memory is constrained to omit trace and video reco
 - **Q** leans gravity, once a build has learned it.
 - **J** opens the build, commissions, and route journal; the machine pauses while you read.
 - **Esc** pauses. Settings offer 0.75×, 1×, 1.5×, or 2× pacing, motion controls, and larger text. Hidden tabs pause automatically.
-- Gold raises the multiplier. Gutters and spikes crack the shell. An empty shell ends the fall.
+- Every machine has a score target. Reach it in one fall or lose a shell; double or triple it for bonus gears.
+- Gold raises the multiplier. Gutters, spikes and missed targets crack the shell. An empty shell ends the fall.
 - Shards stay. They study schematics, which add relics to future falls.
 
 Rubber Heart is awake at the start. Prism Core wakes after the first fall. Void Marble wakes when you reach the Gravity Core, or after two falls.

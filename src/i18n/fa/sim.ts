@@ -112,11 +112,11 @@ export const sim: Dictionary = {
   'A quiet final line. Choose what the build still needs.': 'مسیر پایانی آرام. آنچه چیدمانت هنوز کم دارد انتخاب کن.',
   'Take the long way through gravity for one last relic.': 'برای آخرین یادگار، راه طولانی را از میان گرانش برو.',
   'Break the core. Read its return rhythm, protect the shell, and claim the maw.': 'هسته را بشکن. ریتم بازگشتش را بخوان، از پوسته محافظت کن و دهانه را تصاحب کن.',
-  'The Bellkeeper guards three chimes. Strike each for 70 gears and a relic. Linked bells retract; one safe-pocket return preserves progress. Gutters still cost shell.': 'ناقوس‌بان از سه زنگ نگهبانی می‌کند. هر سه را بزن تا 70 چرخ‌دنده و یک یادگار بگیری. زنگ‌های متصل‌شده عقب می‌روند؛ یک بار بازگشت به جیب امن پیشرفت را حفظ می‌کند. ناودان‌ها همچنان پوسته می‌گیرند.',
-  'An anomalous Bellkeeper. The relic is guaranteed if you survive; all three chimes pay 70 extra gears. One safe-pocket return preserves progress. Gutters still cost shell.': 'ناقوس‌بانی ناهنجار. اگر جان سالم به در ببری، یادگار تضمینی است؛ هر سه زنگ با هم 70 چرخ‌دندهٔ اضافه می‌دهند. یک بار بازگشت به جیب امن پیشرفت را حفظ می‌کند. ناودان‌ها همچنان پوسته می‌گیرند.',
-  'The Heartforge answers in pairs: I → II → I → II. Complete its relay for 120 gears and a relic. One safe-pocket return keeps progress; gutters still cost shell. A full repair waits beyond.': 'قلب‌کوره جفت‌جفت پاسخ می‌دهد: I → II → I → II. رله‌اش را کامل کن تا 120 چرخ‌دنده و یک یادگار بگیری. یک بار بازگشت به جیب امن پیشرفت را حفظ می‌کند؛ ناودان‌ها همچنان پوسته می‌گیرند. ترمیمی کامل آن سو منتظر است.',
-  'A forgiving relay guardian. Strike three bells for 70 gears and a relic. One safe-pocket return.': 'نگهبان رله‌ایِ بخشنده. سه زنگ را بزن تا 70 چرخ‌دنده و یک یادگار بگیری. یک بار بازگشت به جیب امن.',
-  'An anomalous furnace with a guaranteed relic. Complete its three bells for 70 extra gears. One safe-pocket return.': 'کوره‌ای ناهنجار با یادگار تضمینی. سه زنگش را کامل کن تا 70 چرخ‌دندهٔ اضافه بگیری. یک بار بازگشت به جیب امن.',
+  'The Bellkeeper guards three chimes. Strike each for 25 gears and a relic. Linked bells retract; one safe-pocket return preserves progress. Gutters still cost shell.': 'ناقوس‌بان از سه زنگ نگهبانی می‌کند. هر سه را بزن تا 25 چرخ‌دنده و یک یادگار بگیری. زنگ‌های متصل‌شده عقب می‌روند؛ یک بار بازگشت به جیب امن پیشرفت را حفظ می‌کند. ناودان‌ها همچنان پوسته می‌گیرند.',
+  'An anomalous Bellkeeper. The relic is guaranteed if you survive; all three chimes pay 25 extra gears. One safe-pocket return preserves progress. Gutters still cost shell.': 'ناقوس‌بانی ناهنجار. اگر جان سالم به در ببری، یادگار تضمینی است؛ هر سه زنگ با هم 25 چرخ‌دندهٔ اضافه می‌دهند. یک بار بازگشت به جیب امن پیشرفت را حفظ می‌کند. ناودان‌ها همچنان پوسته می‌گیرند.',
+  'The Heartforge answers in pairs: I → II → I → II. Complete its relay for 40 gears and a relic. One safe-pocket return keeps progress; gutters still cost shell. A full repair waits beyond.': 'قلب‌کوره جفت‌جفت پاسخ می‌دهد: I → II → I → II. رله‌اش را کامل کن تا 40 چرخ‌دنده و یک یادگار بگیری. یک بار بازگشت به جیب امن پیشرفت را حفظ می‌کند؛ ناودان‌ها همچنان پوسته می‌گیرند. ترمیمی کامل آن سو منتظر است.',
+  'A forgiving relay guardian. Strike three bells for 25 gears and a relic. One safe-pocket return.': 'نگهبان رله‌ایِ بخشنده. سه زنگ را بزن تا 25 چرخ‌دنده و یک یادگار بگیری. یک بار بازگشت به جیب امن.',
+  'An anomalous furnace with a guaranteed relic. Complete its three bells for 25 extra gears. One safe-pocket return.': 'کوره‌ای ناهنجار با یادگار تضمینی. سه زنگش را کامل کن تا 25 چرخ‌دندهٔ اضافه بگیری. یک بار بازگشت به جیب امن.',
 
   // Practice laboratory
   'Practice laboratory': 'آزمایشگاه تمرین',
@@ -167,8 +167,8 @@ export const sim: Dictionary = {
   // Guardians
   'The Bellkeeper': 'ناقوس‌بان',
   'The Heartforge': 'قلب‌کوره',
-  'Strike all three bells, in any order. Linked bells retract. One safe-pocket return keeps your progress; gutters still cost shell. Complete the relay for 70 gears and a relic.': 'هر سه زنگ را، با هر ترتیبی، بزن. زنگ‌های متصل‌شده عقب می‌روند. یک بار بازگشت به جیب امن پیشرفتت را حفظ می‌کند؛ ناودان‌ها همچنان پوسته می‌گیرند. رله را کامل کن تا 70 چرخ‌دنده و یک یادگار بگیری.',
-  'Strike the left and right furnaces in order: I → II → I → II. One safe-pocket return keeps your progress; gutters still cost shell. Complete the relay for 120 gears and a relic.': 'کوره‌های چپ و راست را به ترتیب بزن: I → II → I → II. یک بار بازگشت به جیب امن پیشرفتت را حفظ می‌کند؛ ناودان‌ها همچنان پوسته می‌گیرند. رله را کامل کن تا 120 چرخ‌دنده و یک یادگار بگیری.',
+  'Strike all three bells, in any order. Linked bells retract. One safe-pocket return keeps your progress; gutters still cost shell. Complete the relay for 25 gears and a relic.': 'هر سه زنگ را، با هر ترتیبی، بزن. زنگ‌های متصل‌شده عقب می‌روند. یک بار بازگشت به جیب امن پیشرفتت را حفظ می‌کند؛ ناودان‌ها همچنان پوسته می‌گیرند. رله را کامل کن تا 25 چرخ‌دنده و یک یادگار بگیری.',
+  'Strike the left and right furnaces in order: I → II → I → II. One safe-pocket return keeps your progress; gutters still cost shell. Complete the relay for 40 gears and a relic.': 'کوره‌های چپ و راست را به ترتیب بزن: I → II → I → II. یک بار بازگشت به جیب امن پیشرفتت را حفظ می‌کند؛ ناودان‌ها همچنان پوسته می‌گیرند. رله را کامل کن تا 40 چرخ‌دنده و یک یادگار بگیری.',
 
   // Synergies (resonances): name is `${tier} ${tag}`
   'Emerging bounce': 'جهش نوپا',

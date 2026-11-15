@@ -195,18 +195,18 @@ export function createRoute(rng: () => number, options: RouteOptions = {}): { st
   // outcomes; v3 adds the optional guardians without moving any existing roll.
   if (options.rules !== 2) {
     nodes.gallery.encounter = 'bellkeeper'
-    nodes.gallery.blurb = 'The Bellkeeper guards three chimes. Strike each for 70 gears and a relic. Linked bells retract; one safe-pocket return preserves progress. Gutters still cost shell.'
+    nodes.gallery.blurb = 'The Bellkeeper guards three chimes. Strike each for 25 gears and a relic. Linked bells retract; one safe-pocket return preserves progress. Gutters still cost shell.'
     nodes.kiln.encounter = 'bellkeeper'
-    nodes.kiln.blurb = 'An anomalous Bellkeeper. The relic is guaranteed if you survive; all three chimes pay 70 extra gears. One safe-pocket return preserves progress. Gutters still cost shell.'
+    nodes.kiln.blurb = 'An anomalous Bellkeeper. The relic is guaranteed if you survive; all three chimes pay 25 extra gears. One safe-pocket return preserves progress. Gutters still cost shell.'
     nodes.dynamo.encounter = 'heartforge'
-    nodes.dynamo.blurb = 'The Heartforge answers in pairs: I → II → I → II. Complete its relay for 120 gears and a relic. One safe-pocket return keeps progress; gutters still cost shell. A full repair waits beyond.'
+    nodes.dynamo.blurb = 'The Heartforge answers in pairs: I → II → I → II. Complete its relay for 40 gears and a relic. One safe-pocket return keeps progress; gutters still cost shell. A full repair waits beyond.'
     for (const option of nodes['fork-brass'].options!) {
       if (option.next === 'gallery') {
         option.title = 'The Bellkeeper’s Garden'
-        option.detail = 'A forgiving relay guardian. Strike three bells for 70 gears and a relic. One safe-pocket return.'
+        option.detail = 'A forgiving relay guardian. Strike three bells for 25 gears and a relic. One safe-pocket return.'
       } else if (option.next === 'kiln') {
         option.title = 'The Bellkeeper’s Kiln'
-        option.detail = 'An anomalous furnace with a guaranteed relic. Complete its three bells for 70 extra gears. One safe-pocket return.'
+        option.detail = 'An anomalous furnace with a guaranteed relic. Complete its three bells for 25 extra gears. One safe-pocket return.'
       }
     }
   }

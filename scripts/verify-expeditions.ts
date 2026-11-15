@@ -5,7 +5,7 @@ import { Window } from 'happy-dom'
 import { BALLS, RELICS } from '../src/content/catalog'
 import { COMMISSIONS, MAX_TRIAL, challengeUrl, dailyExpedition, readCheckpoint } from '../src/meta/expedition'
 import { loadSave, writeSave, type SaveData } from '../src/meta/save'
-import { RESEARCH_ORDER, TUNING } from '../src/tuning'
+import { ECON, RESEARCH_ORDER, TUNING } from '../src/tuning'
 import { Drop } from '../src/sim/drop'
 import { PRACTICE_MACHINES } from '../src/game/laboratory'
 
@@ -486,7 +486,7 @@ await check('fork clicks follow their advertised destination and event affordabi
   f.game.onAction('event:0')
   assert.equal(f.game.run.nodeId, 'oracle')
   assert.equal(JSON.stringify([f.game.run.relics, f.game.run.gears]), before)
-  f.game.run.gears = 50
+  f.game.run.gears = ECON.oracleRelic
   f.game.selectedPulse++
   click(f, 'event:0')
   assert.equal(f.game.run.gears, 0)
@@ -714,8 +714,8 @@ await check('physical guardian credit pays once, earns a relic, and never impers
   assert.equal(g.drop.encounterProgress, 3)
   assert.equal(g.drop.encounterComplete, true)
   assert.equal(events.filter(e => e.type === 'encounter-clear').length, 1)
-  assert.equal(events.find(e => e.type === 'encounter-clear').gears, 70)
-  assert.equal(g.run.gears, g.drop.earned)
+  assert.equal(events.find(e => e.type === 'encounter-clear').gears, 25)
+  assert.equal(g.run.gears, g.drop.gearsEarned, 'the bounty is currency, never score')
   assert.equal(g.run.score, g.drop.earned)
   assert.equal(g.drop.wonBoss, false)
   finish(f)
@@ -787,7 +787,7 @@ await check('Brass Ledger net drop earnings reconcile with controller currency a
   d.ball.vy = 740
   f.game.fixed(TUNING.dt)
   assert.equal(d.investments, 1)
-  assert.equal(f.game.run.gears - 100, d.earned)
+  assert.equal(f.game.run.gears - 100, d.gearsEarned, 'peg strikes and investments move score, not the wallet')
   assert.equal(f.game.run.score - 200, d.earned)
 })
 
@@ -800,13 +800,14 @@ await check('a commission pays and mends once, then remains claimed', () => {
   finish(f, { golds: 1, integrity: 1 })
   assert.deepEqual(f.game.run.claimed, ['gold'])
   assert.equal(f.game.run.gears, commission.gears)
-  assert.equal(f.game.run.score, commission.gears)
+  assert.equal(f.game.run.score, 0, 'commissions pay gears, not score')
   assert.equal(f.game.run.integrity, 2)
   assert.equal(f.game.hud().shell, 2, 'the resolved HUD includes the commission repair immediately')
   f.game.enterNode('gallery')
   finish(f, { golds: 1 })
   assert.deepEqual(f.game.run.claimed, ['gold'])
-  assert.equal(f.game.run.gears, commission.gears)
+  // The gallery has no draft, so a surviving landing pays its salvage; the commission does not pay again.
+  assert.equal(f.game.run.gears, commission.gears + ECON.salvage)
 })
 
 await check('banking victory records the win, awards mastery and clears the checkpoint', () => {
@@ -1173,7 +1174,7 @@ await check('Star Chart upgrades apply to standard expeditions and never to dail
   const stock = { nudges: base.game.run.profile.maxNudges, shell: base.game.run.integrityMax, window: base.game.run.profile.comboWindow }
   const f = begin({ save: { chart } })
   assert.equal(f.game.run.pure, false)
-  assert.equal(f.game.run.gears, 40)
+  assert.equal(f.game.run.gears, 25)
   assert.equal(f.game.run.profile.maxNudges, stock.nudges + 1)
   assert.equal(f.game.run.integrityMax, stock.shell + 1)
   assert.equal(f.game.run.integrity, f.game.run.integrityMax)
@@ -1202,7 +1203,7 @@ await check('retrying or replaying a standard expedition keeps the Star Chart', 
   assert.equal(f.game.summary.progress.pure, false)
   click(f, 'retry')
   assert.equal(f.game.run.pure, false)
-  assert.equal(f.game.run.gears, 40)
+  assert.equal(f.game.run.gears, 25)
   f.game.toHub()
   // The retried run is saved, so replacing it needs a confirming second tap.
   f.game.onAction('replay:0')

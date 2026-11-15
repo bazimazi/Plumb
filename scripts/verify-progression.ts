@@ -42,7 +42,7 @@ check('endless Star Chart nodes stay bounded while costs keep rising', () => {
   const b = chartBonuses({ nudge: 99, shell: 99, startGears: 99, discount: 99 })
   assert.equal(b.nudge, 1)
   assert.equal(b.shell, 1)
-  assert.equal(b.startGears, 40)
+  assert.equal(b.startGears, 25)
   assert.ok(Math.abs(b.discount - 0.2) < 1e-9)
 })
 

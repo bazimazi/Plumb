@@ -9,6 +9,10 @@ export interface DropReport {
   advice: string
   elapsed: number
   earned: number
+  /** The machine's score target, 0 when it has none. */
+  target: number
+  /** Currency earned this fall. */
+  gears: number
   peakCombo: number
   resources: { label: string; used: number; remaining: number }[]
   damage: { time: number; cause: string; amount: number }[]
@@ -19,6 +23,7 @@ const DAMAGE_NAMES: Record<DropDamage['cause'], string> = {
   spike: 'Spike',
   gutter: 'Gutter',
   'grinder-miss': 'Grinder miss',
+  short: 'Short of target',
 }
 
 function landing(drop: Drop): string {
@@ -63,7 +68,8 @@ export function describeDrop(drop: Drop): DropReport {
     outcome = 'shatter'; title = t('Shell broken')
     detail = finalDamage?.cause === 'spike' ? t('A spike used the remaining shell.')
       : finalDamage?.cause === 'gutter' ? t('The gutter used the remaining shell.')
-        : finalDamage?.cause === 'grinder-miss' ? t('A Grinder miss used the remaining shell.') : t('The shell reached zero.')
+        : finalDamage?.cause === 'grinder-miss' ? t('A Grinder miss used the remaining shell.')
+          : finalDamage?.cause === 'short' ? t('The sphere landed short of the target and the machine took the last shell.') : t('The shell reached zero.')
   } else if (drop.wonBoss) {
     outcome = 'boss-win'; title = t('The Grinder falls'); detail = t('All five core hits landed. {landing}', { landing: landing(drop) })
   } else if (drop.captured === 'hazard') {
@@ -73,11 +79,14 @@ export function describeDrop(drop: Drop): DropReport {
     title = drop.encounterComplete ? t('Guardian linked') : t('Guardian unfinished')
     const linked = t('{name}: {progress}/{required} relays linked.', { name: t(encounter.name), progress: drop.encounterProgress, required: encounter.required })
     const bounty = drop.encounterComplete
-      ? t('The flat {bounty}-gear guardian bounty was added to this fall.', { bounty: encounter.bounty })
+      ? t('The flat {bounty}-gear guardian bounty was added to your gears.', { bounty: encounter.bounty })
       : t('This optional objective does not block the route.')
     detail = `${linked} ${bounty} ${landing(drop)}`
   } else {
     outcome = 'landing'; title = drop.jackpot ? t('Jackpot landing') : t('Fall settled'); detail = landing(drop)
+  }
+  if (drop.target && drop.captured && !drop.board.boss) {
+    detail += ` ${drop.targetMet ? t('Scored {score} of a {target} target.', { score: drop.earned, target: drop.target }) : t('Scored {score} of a {target} target: {short} short.', { score: drop.earned, target: drop.target, short: drop.target - drop.earned })}`
   }
   if (objective && !['guardian-complete', 'guardian-unfinished', 'boss-win'].includes(outcome)) {
     const params = { name: objective.name, progress: objective.progress, required: objective.required }
@@ -102,13 +111,16 @@ export function describeDrop(drop: Drop): DropReport {
   if (tips.length < 2 && finalDamage) {
     tips.push(finalDamage.cause === 'spike' ? t('A spike cost shell during this fall. Inspect its lane before the next release.')
       : finalDamage.cause === 'gutter' ? t('The gutter cost shell. The machine overview shows its landing pockets.')
-        : t('A Grinder miss cost shell. The core-hit count records progress toward opening the maw.'))
+        : finalDamage.cause === 'short' ? t('Falling short of the target cost shell. Overdrive lifts the sphere back into the pegs for more points.')
+          : t('A Grinder miss cost shell. The core-hit count records progress toward opening the maw.'))
   }
   return {
     title, outcome, detail,
     advice: tips.slice(0, 2).join(' ') || t('Inspect the machine with V before your next release.'),
     elapsed: drop.time,
     earned: drop.earned,
+    target: drop.target,
+    gears: drop.gearsEarned,
     peakCombo: drop.peakCombo,
     resources,
     damage: drop.damageHistory.map(d => ({ time: d.time, cause: t(DAMAGE_NAMES[d.cause]), amount: d.amount })),

@@ -25,7 +25,8 @@ document.addEventListener('gesturestart', (e) => e.preventDefault())
 const boot = document.getElementById('stage')
 try {
   selfcheckPhysics()
-  new Game()
+  const game = new Game()
+  if (import.meta.env.DEV) (window as unknown as { __plumb: Game }).__plumb = game
 } catch (error) {
   const message = error instanceof Error ? error.message : t('The machine failed to start.')
   if (boot) {

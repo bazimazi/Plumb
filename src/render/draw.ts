@@ -60,6 +60,8 @@ export interface DrawInput {
   rings: Ring[]
   /** Seconds since each peg popped during the settle, 0 while still standing. */
   popT: Float32Array | null
+  /** Presentation-only recoil per peg: x, y, vx, vy. */
+  pegKick?: Float32Array | null
   launchKick: number
   /** Time warp: 1 is real time, lower means the fall is slowed for drama. */
   warp: number
@@ -448,10 +450,12 @@ function drawPegs(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
     if (!lit && flash <= 0) continue
     const peg = board.pegs[i]
     const pose = pegPose(peg, drop.time, amp)
+    const kick = input.pegKick
+    const kx = kick ? kick[i * 4] : 0, ky = kick ? kick[i * 4 + 1] : 0
     const gold = peg.kind === 'gold' || drop.gilded[i]
     const color = gold ? pal.gold : pal.accent
     const breathe = 0.28 + 0.08 * Math.sin(input.time * 3 + i)
-    glow(ctx, color, pose.x, pose.y, peg.r * (3 + flash * 2.4), (lit ? breathe : 0) + flash * 0.9)
+    glow(ctx, color, pose.x + kx, pose.y + ky, peg.r * (3 + flash * 2.4), (lit ? breathe : 0) + flash * 0.9)
   }
   ctx.globalAlpha = 1
   ctx.globalCompositeOperation = 'source-over'
@@ -492,7 +496,9 @@ function drawPegs(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
     ctx.stroke()
     const sprite = pegSprite(pal, kind, drop.lit[i])
     const size = peg.r * 3.3 * scale
-    ctx.drawImage(sprite, pose.x - size / 2, pose.y - size / 2, size, size)
+    const kick = input.pegKick
+    const kx = kick ? kick[i * 4] : 0, ky = kick ? kick[i * 4 + 1] : 0
+    ctx.drawImage(sprite, pose.x + kx - size / 2, pose.y + ky - size / 2, size, size)
     if (kind === 'gold') {
       const a = input.time * 1.2 + i
       const sx = pose.x + Math.cos(a) * (peg.r + 6)
@@ -516,7 +522,7 @@ function drawPegs(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
       ctx.globalAlpha = flash * 0.8
       ctx.fillStyle = '#fff'
       ctx.beginPath()
-      ctx.arc(pose.x, pose.y, peg.r * scale, 0, Math.PI * 2)
+      ctx.arc(pose.x + kx, pose.y + ky, peg.r * scale, 0, Math.PI * 2)
       ctx.fill()
     }
     if (drop.critPeg === i) {
@@ -1000,8 +1006,8 @@ function textDirection(ctx: CanvasRenderingContext2D, text: string) {
 
 function binLabel(bin: Bin, board: Board, drop: Drop): string {
   if (bin.kind === 'hazard') return t('GUTTER')
-  if (bin.kind === 'coin') return `+${Math.round(12 * board.payout)}`
-  if (bin.kind === 'bonus') return t('RICH ×')
+  if (bin.kind === 'coin') return t('SAFE')
+  if (bin.kind === 'bonus') return t('RICH ×{mult}', { mult: drop.mult.toFixed(1) })
   return drop.coreOpen || !board.boss ? t('MAW') : t('SEALED')
 }
 
@@ -1438,21 +1444,44 @@ function drawFloaters(ctx: CanvasRenderingContext2D, floaters: Floater[]) {
   ctx.lineJoin = 'round'
   for (const f of floaters) {
     const k = 1 - f.life / f.max
-    const pop = k < 0.14 ? 1 + (1 - k / 0.14) * 0.7 : 1
+    // Elastic entrance: overshoot, settle, then a gentle shrink as it fades.
+    const pop = k < 0.22 ? 0.35 + 0.65 * elastic(k / 0.22) : 1 - Math.max(0, k - 0.7) * 0.25
     const size = (f.size ?? 18) * pop
     const left = f.life / f.max
     ctx.globalAlpha = left < 0.35 ? left / 0.35 : 1
     ctx.font = `800 ${size.toFixed(1)}px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif`
-    ctx.lineWidth = Math.max(3, size * 0.22)
-    ctx.strokeStyle = 'rgba(8,6,4,0.85)'
     textDirection(ctx, f.text)
+    if (f.priority || (f.size ?? 18) >= 26) {
+      ctx.globalCompositeOperation = 'lighter'
+      const a = ctx.globalAlpha
+      glow(ctx, f.color, f.x, f.y, size * 1.6, 0.35 * a)
+      ctx.globalAlpha = a
+      ctx.globalCompositeOperation = 'source-over'
+    }
+    ctx.lineWidth = Math.max(3, size * 0.26)
+    ctx.strokeStyle = 'rgba(10,6,24,0.92)'
+    ctx.strokeText(f.text, f.x, f.y + size * 0.06)
     ctx.strokeText(f.text, f.x, f.y)
     ctx.fillStyle = f.color
     ctx.fillText(f.text, f.x, f.y)
+    // A thin highlight on the upper half keeps large numbers from looking flat.
+    if (size >= 22) {
+      ctx.save()
+      ctx.beginPath(); ctx.rect(f.x - size * 4, f.y - size, size * 8, size * 0.62); ctx.clip()
+      ctx.fillStyle = 'rgba(255,255,255,0.28)'
+      ctx.fillText(f.text, f.x, f.y)
+      ctx.restore()
+    }
   }
   ctx.globalAlpha = 1
   ctx.textBaseline = 'alphabetic'
   ctx.direction = 'inherit'
+}
+
+function elastic(k: number): number {
+  if (k <= 0) return 0
+  if (k >= 1) return 1
+  return Math.pow(2, -9 * k) * Math.sin((k * 10 - 0.75) * (2 * Math.PI / 3)) + 1
 }
 
 function parseHex(hex: string): [number, number, number] {

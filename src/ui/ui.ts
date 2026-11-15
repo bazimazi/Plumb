@@ -28,6 +28,10 @@ export interface ForkCard {
   detail: string
   risk: 'safe' | 'risky'
   index: number
+  /** Score target of the machine this path leads to, 0 for services. */
+  target?: number
+  /** What surviving that machine pays. */
+  reward?: string
 }
 
 export interface CollItem {
@@ -72,6 +76,15 @@ export interface HudModel {
   comboT: number
   earned: number
   tally: boolean
+  /** The machine's score target; 0 when it has none (the Grinder). */
+  target?: number
+  targetMet?: boolean
+  overcharge?: number
+  /** Heading home short of the target. */
+  danger?: boolean
+  short?: boolean
+  /** Core strikes on the Grinder, which has no score target. */
+  bossHits?: number | null
   nudges: number
   maxNudges: number
   nudgeCooldown?: number
@@ -206,8 +219,8 @@ export type StageModel =
   | { kind: 'shop'; gears: number; cards: ChoiceCard[]; reroll: number; canReroll: boolean; build: string; repairCost: number; canRepair: boolean }
   | { kind: 'fork'; title: string; options: ForkCard[] }
   | { kind: 'repair'; text: string; action: string }
-  | { kind: 'bargain'; canShell: boolean; canPay: boolean }
-  | { kind: 'resolve'; title: string; sub: string; earned: number; tone: 'good' | 'bad' | 'gold' }
+  | { kind: 'bargain'; canShell: boolean; canPay: boolean; pay: number; walk: number }
+  | { kind: 'resolve'; title: string; sub: string; earned: number; tone: 'good' | 'bad' | 'gold'; target?: number; met?: boolean; overcharge?: number; short?: boolean; gears?: { label: string; n: number }[] }
   | { kind: 'pause'; practice?: boolean; canSave?: boolean }
   | { kind: 'laboratory'; lab: LabModel }
   | { kind: 'practice-result'; report: DropReport; attempt: number; best: number; comparison: number | null }
@@ -225,6 +238,12 @@ export interface ViewModel {
   stage: StageModel
   toast: { title: string; sub: string; big?: boolean } | null
   flash: '' | 'gold' | 'hurt' | 'core'
+  /** Title card for a machine that has just slid into place. */
+  intro?: { key: number; kicker: string; title: string; target: number; anomaly: string; reward?: string } | null
+  /** Gears earned at viewport points, to fly into the wallet. */
+  coins?: { x: number; y: number; n: number }[]
+  /** Shell and wallet shown above decision rooms, where the playfield HUD is dimmed. */
+  status?: { shell: number; shellMax: number; gears: number; score: number } | null
 }
 
 function esc(s: string): string {
@@ -290,6 +309,10 @@ export class UI {
   private prev: Record<string, string | number> = {}
   private lastT = performance.now()
   private toastKey = ''
+  private introKey = -1
+  private introEl: HTMLElement | null = null
+  private statusEl: HTMLElement | null = null
+  private statusKey = ''
 
   constructor(
     private stage: HTMLElement,
@@ -306,6 +329,18 @@ export class UI {
     }
     stage.addEventListener('click', click)
     hud.addEventListener('click', click)
+    const app = stage.parentElement
+    if (app) {
+      this.introEl = document.createElement('div')
+      this.introEl.className = 'machine-intro'
+      this.introEl.setAttribute('aria-live', 'polite')
+      this.introEl.hidden = true
+      app.appendChild(this.introEl)
+      this.statusEl = document.createElement('div')
+      this.statusEl.className = 'decision-status'
+      this.statusEl.hidden = true
+      app.appendChild(this.statusEl)
+    }
     stage.addEventListener('input', (e) => {
       const t = e.target as HTMLInputElement
       if (t.dataset.seed != null) this.onSeed(t.value)
@@ -381,6 +416,9 @@ export class UI {
       if (prevKind !== view.stage.kind) countUp(this.stage)
     }
     this.renderHud(view.hud, dt)
+    this.renderIntro(view.intro ?? null)
+    this.renderStatus(view.status ?? null)
+    if (view.coins?.length) for (const coin of view.coins) this.flyCoins(coin)
     if (view.toast) {
       const key = `${view.toast.title}|${view.toast.sub}|${!!view.toast.big}`
       this.toast.hidden = false
@@ -408,6 +446,71 @@ export class UI {
       this.toast.classList.remove('live')
     }
     if (this.flash.className !== view.flash) this.flash.className = view.flash
+  }
+
+  /** A title card as each machine slides in: where you are, and the score it asks for. */
+  private renderIntro(intro: ViewModel['intro']): void {
+    const el = this.introEl
+    if (!el) return
+    if (!intro) {
+      if (!el.hidden && !el.classList.contains('out')) {
+        el.classList.add('out')
+        setTimeout(() => { if (el.classList.contains('out')) { el.hidden = true; el.classList.remove('out') } }, 260)
+      }
+      return
+    }
+    if (intro.key === this.introKey && !el.hidden) return
+    this.introKey = intro.key
+    el.classList.remove('out')
+    el.innerHTML = `<small>${esc(intro.kicker)}</small><h2>${esc(intro.title)}</h2>${intro.target ? `<p class="mi-target"><span>${esc(t('Target'))}</span><b>${intro.target.toLocaleString('en-US')}</b></p><p class="mi-rule">${esc(t('Score it in one fall, or the machine cracks your shell.'))}</p>` : `<p class="mi-rule">${esc(t('Five core strikes open the maw.'))}</p>`}${intro.anomaly ? `<p class="mi-anomaly">${ico('sparkle')}${esc(intro.anomaly)}</p>` : ''}${intro.reward ? `<p class="mi-reward">${ico('star')}${esc(intro.reward)}</p>` : ''}`
+    el.hidden = false
+    // Restart the entrance animation for consecutive machines.
+    el.classList.remove('in'); void el.offsetWidth; el.classList.add('in')
+  }
+
+  private renderStatus(status: ViewModel['status']): void {
+    const el = this.statusEl
+    if (!el) return
+    const key = status ? `${status.shell}/${status.shellMax}/${status.gears}/${status.score}/${document.documentElement.lang}` : ''
+    if (key === this.statusKey) return
+    const prev = this.statusKey.split('/')
+    this.statusKey = key
+    el.hidden = !status
+    if (!status) return
+    el.innerHTML = `<span class="ds-shell" aria-label="${esc(t('Shell {n} of {max}', { n: status.shell, max: status.shellMax }))}">${pips(status.shell, status.shellMax, 'shell-pips')}<em>${status.shell}/${status.shellMax}</em></span><span class="ds-gears" title="${esc(t('Gears'))}">${ico('cog')}<b>${status.gears.toLocaleString('en-US')}</b></span><span class="ds-score" title="${esc(t('Score'))}">${ico('star')}<b>${compact(status.score)}</b></span>`
+    if (prev.length > 2) {
+      if (Number(prev[0]) !== status.shell) bump(el.querySelector('.ds-shell'), 1.2)
+      if (Number(prev[2]) !== status.gears) bump(el.querySelector('.ds-gears'), 1.2)
+    }
+  }
+
+  /** Gear coins arc from where they were earned into the wallet chip. */
+  private flyCoins(coin: { x: number; y: number; n: number }): void {
+    const target = this.hud.querySelector('.chip.gears') as HTMLElement | null
+    if (!target || reduced || typeof document.body.animate !== 'function') return
+    const r = target.getBoundingClientRect()
+    if (!r.width) return
+    const tx = r.left + r.width * 0.3, ty = r.top + r.height * 0.6
+    const count = Math.max(1, Math.min(7, Math.ceil(coin.n / 3)))
+    const layer = document.getElementById('app') ?? document.body
+    for (let i = 0; i < count; i++) {
+      const c = document.createElement('i')
+      c.className = 'coin-fly'
+      c.innerHTML = ico('cog')
+      layer.appendChild(c)
+      const sx = coin.x + (Math.random() - 0.5) * 50, sy = coin.y + (Math.random() - 0.5) * 30
+      const mx = (sx + tx) / 2 + (Math.random() - 0.5) * 160, my = Math.min(sy, ty) - 80 - Math.random() * 80
+      const anim = c.animate([
+        { transform: `translate(${sx}px, ${sy}px) scale(.2)`, opacity: 0 },
+        { transform: `translate(${sx}px, ${sy - 24}px) scale(1.15)`, opacity: 1, offset: 0.18 },
+        { transform: `translate(${mx}px, ${my}px) scale(1)`, opacity: 1, offset: 0.55 },
+        { transform: `translate(${tx}px, ${ty}px) scale(.6)`, opacity: 0.9 },
+      ], { duration: 720 + i * 70, delay: i * 55, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'both' })
+      anim.onfinish = () => {
+        c.remove()
+        if (i === count - 1) bump(target, 1.16)
+      }
+    }
   }
 
   /** Eases a displayed number toward its target so totals roll instead of jumping. */
@@ -475,7 +578,11 @@ export class UI {
           ${coachHtml('desktop')}
         </aside>
         ${hud.practice ? `<div class="practice-toolbar" aria-label="${esc(t('Practice controls'))}"><span>${esc(t('Practice'))}</span><button class="btn" data-act="lab-retry">${esc(t('Restart'))}</button><button class="btn" data-act="lab-configure">${esc(t('Configure'))}</button><button class="btn practice-journal" data-act="journal">${esc(t('Journal'))}</button></div>` : ''}
-        <div class="tally" data-hud="tally"><span>${esc(t('This drop'))}</span><b data-hud="earned"></b></div>
+        <div class="tally target-meter" data-hud="tally" role="group" aria-label="${esc(t('Score target'))}">
+          <div class="tm-row"><span class="tm-label" data-hud="tm-label"></span><b class="tm-score" data-hud="earned"></b></div>
+          <div class="tm-bar"><i class="tm-fill" data-hud="tm-fill"></i><i class="tm-over" data-hud="tm-over"></i><span class="tm-mark" aria-hidden="true"></span></div>
+          <div class="tm-foot"><span class="tm-state" data-hud="tm-state"></span><span class="tm-tiers"><i data-hud="tm-x2">×2</i><i data-hud="tm-x3">×3</i></span></div>
+        </div>
         <div class="controls ${hud.aiming ? 'aim-controls' : 'drop-controls'}">
           ${hud.playing && hud.aiming ? `<button class="release-sphere btn btn-go" data-act="launch">${ico('down', 'release-symbol')}<span>${esc(t('Release'))}<small class="pointer-only">${esc(t('Mouse or ← → to aim'))}</small><small class="touch-only">${esc(t('or drag the board, lift to drop'))}</small></span><kbd>Enter</kbd></button>` : ''}
           ${hud.playing && hud.aiming ? `<button class="machine-overview btn ${hud.overview ? 'selected' : ''}" data-act="overview" aria-pressed="${hud.overview}">${ico('eye')}<kbd>V</kbd><span>${esc(hud.overview ? t('Back') : t('Inspect'))}</span></button>` : ''}
@@ -504,11 +611,40 @@ export class UI {
     if (gearsWas !== null && hud.gears > gearsWas) bump(q('gears'), 1.18)
     set('score', String(this.roll('score', hud.score, dt)))
     const earned = this.roll('earned', hud.earned, dt)
-    set('earned', `+${earned}`)
+    set('earned', earned.toLocaleString('en-US'))
     const earnedWas = changed('earned-t', hud.earned)
-    if (earnedWas !== null && hud.earned > earnedWas) bump(q('earned'), 1.22)
+    if (earnedWas !== null && hud.earned > earnedWas) bump(q('earned'), 1.12 + Math.min(0.18, (hud.earned - earnedWas) / 400))
     const tally = q('tally') as HTMLElement | null
-    if (tally) tally.classList.toggle('show', hud.tally)
+    if (tally) {
+      const goal = hud.target ?? 0
+      const boss = hud.bossHits != null
+      tally.classList.toggle('show', hud.tally)
+      tally.classList.toggle('boss', boss)
+      tally.classList.toggle('no-target', !goal && !boss)
+      tally.classList.toggle('danger', !!hud.danger)
+      tally.classList.toggle('short', !!hud.short)
+      tally.dataset.tier = boss ? '0' : String(hud.overcharge ?? 0)
+      tally.classList.toggle('met', boss ? (hud.bossHits ?? 0) >= 5 : !!hud.targetMet)
+      set('tm-label', boss ? t('Core seals') : goal ? t('Target {n}', { n: goal.toLocaleString('en-US') }) : t('This fall'))
+      if (boss) set('earned', ratio(hud.bossHits ?? 0, 5))
+      const base = boss ? Math.min(1, (hud.bossHits ?? 0) / 5) : goal ? Math.min(1, earned / goal) : 0
+      const over = goal && hud.targetMet ? Math.min(1, Math.max(0, earned - goal) / (goal * 2)) : 0
+      const fill = q('tm-fill') as HTMLElement | null
+      if (fill) fill.style.transform = `scaleX(${base.toFixed(3)})`
+      const overFill = q('tm-over') as HTMLElement | null
+      if (overFill) overFill.style.transform = `scaleX(${over.toFixed(3)})`
+      const state = boss ? (hud.bossHits ?? 0) >= 5 ? t('The maw is open') : t('Strike the core') : !goal ? '' : hud.short ? t('Short · shell −1') : hud.targetMet
+        ? (hud.overcharge ?? 0) >= 2 ? t('Supercharged') : (hud.overcharge ?? 0) >= 1 ? t('Overcharged') : t('Powered')
+        : hud.danger ? t('Need {n} more!', { n: Math.max(0, goal - hud.earned).toLocaleString('en-US') })
+          : hud.aiming ? t('Reach it or lose 1 shell') : t('{n} to go', { n: Math.max(0, goal - hud.earned).toLocaleString('en-US') })
+      set('tm-state', state)
+      q('tm-x2')?.classList.toggle('on', (hud.overcharge ?? 0) >= 1)
+      q('tm-x3')?.classList.toggle('on', (hud.overcharge ?? 0) >= 2)
+      const metWas = changed('tm-met', hud.targetMet ? 1 : 0)
+      if (metWas === 0 && hud.targetMet) { tally.classList.remove('burst'); void tally.offsetWidth; tally.classList.add('burst') }
+      const tierWas = changed('tm-tier', hud.overcharge ?? 0)
+      if (tierWas !== null && (hud.overcharge ?? 0) > tierWas) bump(tally, 1.08)
+    }
 
     set('mult', hud.mult)
     if (changed('mult', hud.mult) !== null) bump(q('mult'), 1.35)
@@ -859,7 +995,7 @@ function laboratoryHtml(lab: LabModel): string {
     <div class="lab-spheres">${lab.spheres.map(s => `<button class="lab-sphere ${s.selected ? 'selected' : ''}" data-act="lab-sphere:${esc(s.id)}" aria-pressed="${s.selected}">${orb(sphereColors[s.id] ?? sphereColors.rubber)}<span>${esc(s.name)}</span></button>`).join('')}</div>
     <h3 class="section-h">3 · ${esc(t('Loadout'))}</h3>
     <div class="lab-builds">${lab.builds.map(b => `<button class="lab-build ${b.selected ? 'selected' : ''}" data-act="lab-build:${esc(b.id)}" aria-pressed="${b.selected}"><strong>${esc(b.name)}</strong><span>${esc(b.text)}</span></button>`).join('')}</div>
-    ${lab.best ? `<div class="lab-best panel"><small>${esc(t('Session best'))}</small><b>${lab.best.earned.toLocaleString('en-US')} ${ico('cog')}</b><p>${esc(t('{n} peak combo', { n: lab.best.combo }))}${lab.best.objective ? ` · ${esc(lab.best.objective)}` : ''}</p></div>` : ''}
+    ${lab.best ? `<div class="lab-best panel"><small>${esc(t('Session best'))}</small><b>${lab.best.earned.toLocaleString('en-US')} ${ico('star')}</b><p>${esc(t('{n} peak combo', { n: lab.best.combo }))}${lab.best.objective ? ` · ${esc(lab.best.objective)}` : ''}</p></div>` : ''}
     <p class="fine">${esc(t('Seed {seed} · Practice keeps your expedition, shards, unlocks and records untouched.', { seed: lab.seed }))}</p>
     <button class="btn btn-go big lab-start" data-act="lab-start">${ico('play')}<span>${esc(lab.attempt > 0 ? t('Launch again') : t('Launch practice'))}</span></button>
   </div></article>`
@@ -868,7 +1004,7 @@ function laboratoryHtml(lab: LabModel): string {
 /** Only facts recorded by the simulation appear in this panel. */
 function dropReportHtml(report: DropReport): string {
   const fall = esc(t('Fall analysis'))
-  return `<section class="drop-report panel" data-outcome="${esc(report.outcome)}" aria-label="${fall}"><div class="report-head">${ico('eye')}<div><small>${fall}</small><h3>${esc(report.title)}</h3></div></div><p class="report-detail">${esc(report.detail)}</p><div class="report-metrics"><div><small>${esc(t('Gears'))}</small><b data-report="earned">${report.earned.toLocaleString('en-US')}</b></div><div><small>${esc(t('Time'))}</small><b data-report="elapsed">${esc(t('{s}s', { s: report.elapsed.toFixed(1) }))}</b></div><div><small>${esc(t('Peak combo'))}</small><b data-report="combo">${report.peakCombo}</b></div></div>${report.objective ? `<div class="report-objective ${report.objective.complete ? 'complete' : ''}"><span>${esc(report.objective.name)}</span><strong>${ratio(report.objective.progress, report.objective.required)} · ${esc(report.objective.complete ? t('Complete') : t('Incomplete'))}</strong></div>` : ''}<div class="report-cols"><section><h4>${esc(t('Shell damage'))}</h4>${report.damage.length ? `<ol>${report.damage.map(d => `<li data-report="damage"><time>${esc(t('{s}s', { s: d.time.toFixed(1) }))}</time><span>${esc(d.cause)}</span><b>−${d.amount}</b></li>`).join('')}</ol>` : `<p class="empty" data-report="damage">${esc(t('No shell damage recorded.'))}</p>`}</section><section><h4>${esc(t('Controls used'))}</h4><ul>${report.resources.map(r => `<li data-report="resource"><span>${esc(r.label)}</span><strong>${esc(t('{used} used · {left} left', { used: r.used, left: r.remaining }))}</strong></li>`).join('')}</ul></section></div><div class="report-advice">${ico('sparkle')}<p data-report="advice">${esc(report.advice)}</p></div></section>`
+  return `<section class="drop-report panel" data-outcome="${esc(report.outcome)}" aria-label="${fall}"><div class="report-head">${ico('eye')}<div><small>${fall}</small><h3>${esc(report.title)}</h3></div></div><p class="report-detail">${esc(report.detail)}</p><div class="report-metrics"><div><small>${esc(t('Score'))}</small><b data-report="earned">${report.earned.toLocaleString('en-US')}</b></div><div><small>${esc(t('Time'))}</small><b data-report="elapsed">${esc(t('{s}s', { s: report.elapsed.toFixed(1) }))}</b></div><div><small>${esc(t('Peak combo'))}</small><b data-report="combo">${report.peakCombo}</b></div></div>${report.objective ? `<div class="report-objective ${report.objective.complete ? 'complete' : ''}"><span>${esc(report.objective.name)}</span><strong>${ratio(report.objective.progress, report.objective.required)} · ${esc(report.objective.complete ? t('Complete') : t('Incomplete'))}</strong></div>` : ''}<div class="report-cols"><section><h4>${esc(t('Shell damage'))}</h4>${report.damage.length ? `<ol>${report.damage.map(d => `<li data-report="damage"><time>${esc(t('{s}s', { s: d.time.toFixed(1) }))}</time><span>${esc(d.cause)}</span><b>−${d.amount}</b></li>`).join('')}</ol>` : `<p class="empty" data-report="damage">${esc(t('No shell damage recorded.'))}</p>`}</section><section><h4>${esc(t('Controls used'))}</h4><ul>${report.resources.map(r => `<li data-report="resource"><span>${esc(r.label)}</span><strong>${esc(t('{used} used · {left} left', { used: r.used, left: r.remaining }))}</strong></li>`).join('')}</ul></section></div><div class="report-advice">${ico('sparkle')}<p data-report="advice">${esc(report.advice)}</p></div></section>`
 }
 
 // ---------------------------------------------------------------------------
@@ -887,17 +1023,19 @@ function stageHtml(stage: StageModel): string {
     case 'laboratory':
       return laboratoryHtml(stage.lab)
     case 'practice-result': {
-      const difference = stage.comparison == null ? t('First recorded attempt on this setup') : t('{diff} gears versus your previous attempt', { diff: `${stage.comparison > 0 ? '+' : ''}${stage.comparison.toLocaleString('en-US')}` })
-      return screen('practice-result', esc(t('Attempt {n}', { n: stage.attempt })), `<div class="practice-comparison panel"><span>${esc(t('Best this session'))}</span><b>${stage.best.toLocaleString('en-US')} ${ico('cog')}</b><small>${esc(difference)}</small></div><div class="btn-row"><button class="btn btn-go big" data-act="lab-retry">${ico('refresh')}<span>${esc(t('Retry'))} <kbd>Enter</kbd></span></button></div><div class="btn-row"><button class="btn" data-act="lab-configure">${ico('gear')}<span>${esc(t('Configure'))}</span></button><button class="btn" data-act="lab-exit">${ico('back')}<span>${esc(t('Leave'))}</span></button></div>${dropReportHtml(stage.report)}<p class="fine">${esc(t('Practice attempts stay in this session. Expedition progress, shards, unlocks, and records are preserved.'))}</p>`, { back: 'lab-configure', kicker: t('Practice result') })
+      const difference = stage.comparison == null ? t('First recorded attempt on this setup') : t('{diff} points versus your previous attempt', { diff: `${stage.comparison > 0 ? '+' : ''}${stage.comparison.toLocaleString('en-US')}` })
+      return screen('practice-result', esc(t('Attempt {n}', { n: stage.attempt })), `<div class="practice-comparison panel"><span>${esc(t('Best this session'))}</span><b>${stage.best.toLocaleString('en-US')} ${ico('star')}</b><small>${esc(difference)}</small></div><div class="btn-row"><button class="btn btn-go big" data-act="lab-retry">${ico('refresh')}<span>${esc(t('Retry'))} <kbd>Enter</kbd></span></button></div><div class="btn-row"><button class="btn" data-act="lab-configure">${ico('gear')}<span>${esc(t('Configure'))}</span></button><button class="btn" data-act="lab-exit">${ico('back')}<span>${esc(t('Leave'))}</span></button></div>${dropReportHtml(stage.report)}<p class="fine">${esc(t('Practice attempts stay in this session. Expedition progress, shards, unlocks, and records are preserved.'))}</p>`, { back: 'lab-configure', kicker: t('Practice result') })
     }
     case 'help':
       return screen('help-screen', esc(t('How to play')), `
         <div class="howto">
           <div class="howto-card t-cyan">${ico('down')}<h3>${esc(t('Aim & release'))}</h3><p>${esc(t('Drag on the machine or use the arrows, then release. The dotted line shows your first contact.'))} <span class="pointer-only">${esc(t('Enter releases · V inspects.'))}</span></p></div>
           <div class="howto-card t-pink">${ico('next')}<h3>${esc(t('Nudge the fall'))}</h3><p>${esc(t('Nudge left or right a few times per machine. Flip the gate once. Your sphere has a trick too.'))}<span class="pointer-only"> A / D · F · Space · Q</span></p></div>
-          <div class="howto-card t-gold">${ico('bolt')}<h3>${esc(t('Overdrive'))}</h3><p>${esc(t('Hit five different pegs to charge it. Fire for a lift and 2× payouts for three seconds.'))}<span class="pointer-only"> E</span></p></div>
+          <div class="howto-card t-orange">${ico('flag')}<h3>${esc(t('Beat the target'))}</h3><p>${esc(t('Every machine asks for a score in one fall. Land short and it cracks your shell. Double or triple it for bonus gears.'))}</p></div>
+          <div class="howto-card t-gold">${ico('bolt')}<h3>${esc(t('Overdrive'))}</h3><p>${esc(t('Hit five different pegs to charge it. Fire for a lift and 2× payouts for three seconds. Falling short? It climbs back into the pegs.'))}<span class="pointer-only"> E</span></p></div>
           <div class="howto-card t-green">${ico('star')}<h3>${esc(t('Build'))}</h3><p>${esc(t('Pick relics and upgrades between machines. Matching tags awaken bonuses. Gold pegs raise the multiplier.'))}</p></div>
-          <div class="howto-card t-red">${ico('heart')}<h3>${esc(t('Keep your shell'))}</h3><p>${esc(t("Spikes and gutters crack it. Benches between acts repair it. Break the Grinder's five seals to win."))}</p></div>
+          <div class="howto-card t-cyan">${ico('cog')}<h3>${esc(t('Spend gears'))}</h3><p>${esc(t('Pockets, powered machines and guardians pay gears. Spend them at counters and odd bargains along the route.'))}</p></div>
+          <div class="howto-card t-red">${ico('heart')}<h3>${esc(t('Keep your shell'))}</h3><p>${esc(t("Spikes, gutters and missed targets crack it. Benches between acts repair it. Break the Grinder's five seals to win."))}</p></div>
           <div class="howto-card t-violet">${ico('dust')}<h3>${esc(t('Grow forever'))}</h3><p>${esc(t('Every run earns XP and stardust for the Star Chart. Quests, feats, Trials and endless circuits keep going.'))}</p></div>
         </div>
         <details class="fold"><summary>${esc(t('Guardians, saves and fair play'))}</summary><p>${esc(t('The Bellkeeper asks you to ring three bells; the Heartforge to alternate relays I and II. Both are optional, and one safe return before 75 seconds keeps progress. Expeditions save between machines; a reload replays the current drop. Daily constellations and shared links use pure rules so everyone plays the same machine.'))}</p></details>
@@ -938,23 +1076,33 @@ function stageHtml(stage: StageModel): string {
           <button class="btn btn-go big" data-act="leave">${ico('next')}<span>${esc(t('Continue'))}</span></button>
         </div>`
     case 'fork':
-      return `<div class="decision fork-decision"><div class="banner"><small>${esc(t('Choose your path'))}</small><h2>${esc(stage.title)}</h2></div><div class="cards fork-cards">${stage.options.map(o => `<button class="card fork ${o.risk}" data-act="fork:${o.index}" style="--i:${o.index}"><kbd class="num">${o.index + 1}</kbd><span class="fork-badge">${ico(o.risk === 'safe' ? 'shield' : 'flame')}</span><span class="risk ${o.risk}">${esc(o.risk === 'safe' ? t('Safe') : t('Risky'))}</span><h3>${esc(o.title)}</h3><p>${esc(o.detail)}</p><span class="offer-action">${esc(t('Go'))}</span></button>`).join('')}</div></div>`
+      return `<div class="decision fork-decision"><div class="banner"><small>${esc(t('Choose your path'))}</small><h2>${esc(stage.title)}</h2></div><div class="cards fork-cards">${stage.options.map(o => `<button class="card fork ${o.risk}" data-act="fork:${o.index}" style="--i:${o.index}"><kbd class="num">${o.index + 1}</kbd><span class="fork-badge">${ico(o.risk === 'safe' ? 'shield' : 'flame')}</span><span class="risk ${o.risk}">${esc(o.risk === 'safe' ? t('Safe') : t('Risky'))}</span><h3>${esc(o.title)}</h3><p>${esc(o.detail)}</p>${o.target ? `<span class="fork-target">${ico('flag')}${esc(t('Target {n}', { n: o.target.toLocaleString('en-US') }))}</span>` : ''}${o.reward ? `<span class="fork-reward">${esc(o.reward)}</span>` : ''}<span class="offer-action">${esc(t('Go'))}</span></button>`).join('')}</div></div>`
     case 'repair':
       return `<div class="decision repair"><div class="big-icon t-green">${ico('heart')}</div><div class="banner"><small>${esc(t('The Bench'))}</small><h2>${esc(t('Rest & repair'))}</h2></div><p class="lede">${esc(stage.text)}</p><button class="btn btn-go big" data-act="repair">${ico('wrench')}<span>${esc(stage.action)}</span></button></div>`
     case 'bargain':
       return `<div class="decision bargain"><div class="banner red-banner"><small>${esc(t('The Bargain'))}</small><h2>${esc(t('Three bad ideas'))}</h2></div><div class="cards">
           <button class="card offer t-red" data-act="bargain:shell" style="--i:0" ${stage.canShell ? '' : 'disabled'}><kbd class="num">1</kbd>${gem('heart', 'red', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>${esc(t('Crack the shell'))}</h3></span><p>${esc(t('Lose 1 shell. Get a random relic.'))}</p></span><span class="offer-action">${esc(t('Risk it'))}</span></button>
-          <button class="card offer t-orange" data-act="bargain:pay" style="--i:1" ${stage.canPay ? '' : 'disabled'}><kbd class="num">2</kbd>${gem('coin', 'orange', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>${esc(t('Pay 30 gears'))}</h3></span><p>${esc(t('Get a random upgrade.'))}</p></span><span class="offer-action">${esc(t('Pay'))}</span></button>
-          <button class="card offer t-green" data-act="bargain:walk" style="--i:2"><kbd class="num">3</kbd>${gem('shell', 'green', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>${esc(t('Skim the tray'))}</h3></span><p>${esc(t('Take 18 gears and walk away.'))}</p></span><span class="offer-action">${esc(t('Safe'))}</span></button>
+          <button class="card offer t-orange" data-act="bargain:pay" style="--i:1" ${stage.canPay ? '' : 'disabled'}><kbd class="num">2</kbd>${gem('coin', 'orange', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>${esc(t('Pay {n} gears', { n: stage.pay }))}</h3></span><p>${esc(t('Get a random upgrade.'))}</p></span><span class="offer-action">${esc(t('Pay'))}</span></button>
+          <button class="card offer t-green" data-act="bargain:walk" style="--i:2"><kbd class="num">3</kbd>${gem('shell', 'green', 'relic-art')}<span class="offer-body"><span class="offer-top"><h3>${esc(t('Skim the tray'))}</h3></span><p>${esc(t('Take {n} gears and walk away.', { n: stage.walk }))}</p></span><span class="offer-action">${esc(t('Safe'))}</span></button>
         </div></div>`
-    case 'resolve':
+    case 'resolve': {
+      const gears = stage.gears ?? []
+      const total = gears.reduce((sum, g) => sum + g.n, 0)
+      const targetLine = stage.target
+        ? `<div class="rc-target ${stage.met ? 'met' : 'miss'}"><span>${esc(t('Target {n}', { n: stage.target.toLocaleString('en-US') }))}</span><em>${stage.met ? `${ico('check')}${esc((stage.overcharge ?? 0) >= 2 ? t('Supercharged ×3') : (stage.overcharge ?? 0) >= 1 ? t('Overcharged ×2') : t('Powered'))}` : stage.short ? `${ico('heart')}${esc(t('Short · shell −1'))}` : esc(t('Not reached'))}</em></div>`
+        : ''
       return `<button class="resolve ${stage.tone}" data-act="skip">
           <span class="resolve-burst" aria-hidden="true"></span>
           <b>${esc(stage.title)}</b>
           ${stage.sub ? `<span class="sub">${esc(stage.sub)}</span>` : ''}
-          <strong class="earned">+<span data-count="${stage.earned}">0</span>${ico('cog')}</strong>
+          <span class="resolve-card">
+            <span class="rc-score"><small>${esc(t('Score'))}</small><strong class="earned"><span data-count="${stage.earned}">0</span></strong></span>
+            ${targetLine}
+            ${gears.length ? `<span class="rc-gears">${gears.map((g, i) => `<span class="rc-line" style="--i:${i}"><span>${esc(g.label)}</span><b>+${g.n}${ico('cog')}</b></span>`).join('')}<span class="rc-line rc-total" style="--i:${gears.length}"><span>${esc(t('Gears'))}</span><b>+${total}${ico('cog')}</b></span></span>` : ''}
+          </span>
           <em><span class="pointer-only">${t('Click or {key} to continue', { key: '<kbd>Enter</kbd>' })}</span><span class="touch-only">${esc(t('Tap to continue'))}</span></em>
         </button>`
+    }
     case 'pause':
       return `<div class="modal pause-plaque"><div class="big-icon t-blue">${ico('pause')}</div><h2>${esc(t('Paused'))}</h2>${stage.practice ? `<small>${esc(t('Practice'))}</small>` : ''}<div class="btn-col">
           <button class="btn btn-go big" data-act="resume">${ico('play')}<span>${esc(t('Resume'))}</span></button>
@@ -970,13 +1118,15 @@ function stageHtml(stage: StageModel): string {
           <div class="end-hero"><div class="big-icon ${win ? 't-gold' : 't-blue'}">${ico(win ? 'trophy' : 'flag')}</div><small>${esc(s.mode === 'daily' ? t('Daily constellation') : t('Expedition'))} · ${esc(t('Trial {n}', { n: s.ascension }))}</small><h2>${esc(win ? t('Victory!') : t('Run over'))}</h2><p class="lede">${esc(s.line)}</p></div>
           <div class="final"><span>${esc(t('Score'))}</span><b data-count="${s.score}">0</b>${s.best ? `<em class="badge">${esc(t('New best!'))}</em>` : ''}</div>
           <div class="stats">${stat(t('Best multiplier'), esc(s.mult), 'star', 'gold')}${stat(t('Best combo'), String(s.combo), 'bolt', 'cyan')}${stat(t('Circuits'), String(s.clears), 'trophy', 'violet')}${stat(t('Shards'), `+${s.shards}`, 'shard', 'green')}</div>
-          ${s.progress ? progressHtml(s.progress) : ''}
           ${s.awakened.length ? `<p class="unlock">${ico('sparkle')}${esc(t('Unlocked: {list}', { list: list(s.awakened) }))}</p>` : ''}
           ${s.challenges.length ? `<p class="unlock">${ico('check')}${esc(t('Challenges: {list}', { list: list(s.challenges) }))}</p>` : ''}
           <p class="tempt">${esc(s.temptation)}</p>
-          <button class="btn btn-go big" data-act="again">${ico('play')}<span>${esc(t('Play again'))} <kbd>Enter</kbd></span></button>
-          <div class="btn-row"><button class="btn" data-act="retry">${ico('refresh')}<span>${esc(t('Same seed'))}</span></button><button class="btn" data-act="hub">${ico('back')}<span>${esc(t('Home'))}</span></button></div>
-          <div class="btn-row small">${s.canStudy ? `<button class="btn btn-violet" data-act="study">${ico('shard')}<span>${esc(s.studyLabel)}</span></button>` : ''}<button class="btn" data-act="copy-challenge">${ico('share')}<span>${esc(t('Challenge'))}</span></button><button class="btn" data-act="copy-result">${ico('list')}<span>${esc(t('Copy result'))}</span></button></div>
+          <div class="end-actions">
+            <button class="btn btn-go big" data-act="again">${ico('play')}<span>${esc(t('Play again'))} <kbd>Enter</kbd></span></button>
+            <div class="btn-row"><button class="btn" data-act="retry">${ico('refresh')}<span>${esc(t('Same seed'))}</span></button><button class="btn" data-act="hub">${ico('back')}<span>${esc(t('Home'))}</span></button></div>
+            <div class="btn-row small">${s.canStudy ? `<button class="btn btn-violet" data-act="study">${ico('shard')}<span>${esc(s.studyLabel)}</span></button>` : ''}<button class="btn" data-act="copy-challenge">${ico('share')}<span>${esc(t('Challenge'))}</span></button><button class="btn" data-act="copy-result">${ico('list')}<span>${esc(t('Copy result'))}</span></button></div>
+          </div>
+          ${s.progress ? progressHtml(s.progress) : ''}
           <p class="fine">${esc(t('Seed {seed} · {n}/3 commissions · {depth}', { seed: s.seed, n: s.commissions, depth: s.depth }))}</p>
           ${s.debrief ? `<button class="btn practice-last" data-act="practice-last">${ico('flask')}<span>${esc(t('Practice the last machine'))}</span></button>${dropReportHtml(s.debrief)}` : ''}
         </div></article>`
@@ -1052,6 +1202,8 @@ function hubHtml(stage: Extract<StageModel, { kind: 'hub' }>): string {
       <div class="wallet">${wallet('dust', meta?.stardust ?? 0, t('Stardust · spend on the Star Chart'))}${wallet('shard', stage.shards, t('Shards · research new relics'))}</div>
       <button class="round-btn" data-act="settings" aria-label="${esc(t('Settings'))}">${ico('gear')}</button>
     </header>
+    <div class="home-main">
+    <div class="home-showcase">
     <section class="home-hero">
       <h1 class="logo">PLUMB<span aria-hidden="true">!</span></h1>
       <p class="tagline">${esc(t('Cosmic pachinko roguelite'))}</p>
@@ -1071,6 +1223,8 @@ function hubHtml(stage: Extract<StageModel, { kind: 'hub' }>): string {
         ? `<button class="finish ${f.selected ? 'selected' : ''}" data-act="finish:${esc(f.id)}" aria-pressed="${f.selected}" title="${esc(f.name)}" style="--oa:${f.accent};--ob:${f.color};--oc:${f.core}"><i></i></button>`
         : `<span class="finish locked" title="${esc(t('{name} · mastery {n}', { name: f.name, n: f.level }))}" style="--oa:${f.accent};--ob:${f.color};--oc:${f.core}"><i></i><small>${f.level}</small></span>`).join('')}</div>${nextFinish ? `<p class="finish-hint">${esc(t('Next finish at mastery {n}', { n: nextFinish.level }))}</p>` : ''}` : ''}
     </section>
+    </div>
+    <div class="home-side">
     <section class="home-play">
       <div class="trial-select"><button class="round-btn small" data-act="trial-down" aria-label="${esc(t('Lower trial'))}" ${stage.trial <= 0 ? 'disabled' : ''}>${ico('back')}</button><div class="trial-copy-wrap"><b>${esc(t('Trial {n}', { n: stage.trial }))}<small>/${stage.maxTrial}</small></b><span class="trial-copy">${esc(stage.trialText)}</span></div><button class="round-btn small" data-act="trial-up" aria-label="${esc(t('Raise trial'))}" ${stage.trial >= stage.maxTrial ? 'disabled' : ''}>${ico('next')}</button></div>
       ${stage.legacy ? `<p class="legacy-route">${esc(t('Classic route · relay guardians disabled'))}</p>` : ''}
@@ -1087,6 +1241,8 @@ function hubHtml(stage: Extract<StageModel, { kind: 'hub' }>): string {
       <div class="seed-row"><label class="seed"><span>${esc(t('Seed'))}</span><input data-seed value="${esc(stage.seed)}" maxlength="12" spellcheck="false" placeholder="${esc(t('Random'))}" aria-label="${esc(t('Run seed'))}" /></label><button class="round-btn" data-act="random-seed" aria-label="${esc(t('Randomize seed'))}" title="${esc(t('Randomize seed'))}">${ico('refresh')}</button></div>
       <p class="fine">${esc(t('Best {score} · {runs} runs', { score: stage.best.toLocaleString('en-US'), runs: stage.runs }))}</p>
     </details>
+    </div>
+    </div>
     <nav class="home-nav" aria-label="${esc(t('Main menu'))}"><button data-act="help">${ico('help')}<span>${esc(t('How to play'))}</span></button><button data-act="collection">${ico('book')}<span>${esc(t('Archive'))}</span></button><button data-act="history">${ico('list')}<span>${esc(t('Logbook'))}</span></button><button data-act="settings">${ico('gear')}<span>${esc(t('Settings'))}</span></button></nav>
   </div>`
 }

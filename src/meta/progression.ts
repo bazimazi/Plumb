@@ -129,7 +129,7 @@ export function asymptote(level: number, cap: number, half: number): number {
 }
 
 export const STAR_NODES: StarNode[] = [
-  { id: 'startGears', name: 'Provisions', glyph: '⚙', max: 5, base: 20, growth: 1.5, text: l => t('Begin each expedition with {n} gears.', { n: l * 8 }) },
+  { id: 'startGears', name: 'Provisions', glyph: '⚙', max: 5, base: 20, growth: 1.5, text: l => t('Begin each expedition with {n} gears.', { n: l * 5 }) },
   { id: 'combo', name: 'Long Fuse', glyph: '∿', max: 5, base: 30, growth: 1.55, text: l => t('Combo window +{n}s.', { n: (l * 0.03).toFixed(2) }) },
   { id: 'shards', name: 'Shard Lens', glyph: '◆', max: 5, base: 45, growth: 1.6, text: l => t('+{n}% shards from every expedition.', { n: l * 10 }) },
   { id: 'discount', name: "Merchant's Favor", glyph: '%', max: 5, base: 40, growth: 1.6, text: l => t('Shop prices −{n}%.', { n: l * 4 }) },
@@ -173,7 +173,7 @@ export const NO_BONUS: ChartBonuses = { startGears: 0, shell: 0, nudge: 0, disco
 export function chartBonuses(levels: Record<string, number>): ChartBonuses {
   const l = (id: StarEffect) => Math.max(0, Math.min(starNode(id)?.max ?? 0, Math.floor(levels[id] ?? 0)))
   return {
-    startGears: l('startGears') * 8,
+    startGears: l('startGears') * 5,
     shell: l('shell'),
     nudge: l('nudge'),
     discount: l('discount') * 0.04,
@@ -236,7 +236,7 @@ const DAILY_POOL: QuestDef[] = [
   { id: 'd-overdrive', stat: 'overdrives', target: 5, text: 'Trigger Overdrive 5 times' },
   { id: 'd-guardian', stat: 'guardians', target: 1, text: 'Link a guardian' },
   { id: 'd-clean', stat: 'clean', target: 4, text: 'Make 4 clean landings' },
-  { id: 'd-gears', stat: 'gears', target: 1200, text: 'Earn 1,200 gears' },
+  { id: 'd-gears', stat: 'gears', target: 1200, text: 'Score 1,200 points' },
   { id: 'd-nudges', stat: 'nudges', target: 12, text: 'Use 12 nudges' },
   { id: 'd-shatter', stat: 'shatters', target: 6, text: 'Shatter 6 pegs' },
 ]
@@ -247,7 +247,7 @@ const WEEKLY_POOL: QuestDef[] = [
   { id: 'w-machines', stat: 'machines', target: 50, text: 'Survive 50 machines' },
   { id: 'w-golds', stat: 'golds', target: 200, text: 'Strike 200 gold pegs' },
   { id: 'w-combo', stat: 'combo', target: 25, text: 'Reach a 25-hit combo', best: true },
-  { id: 'w-gears', stat: 'gears', target: 12000, text: 'Earn 12,000 gears' },
+  { id: 'w-gears', stat: 'gears', target: 12000, text: 'Score 12,000 points' },
   { id: 'w-guardians', stat: 'guardians', target: 5, text: 'Link 5 guardians' },
 ]
 

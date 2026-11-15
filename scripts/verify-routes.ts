@@ -155,7 +155,7 @@ for (const layout of [...layouts, 'grinder'] as LayoutId[]) {
         let payouts = 0
         for (let step = 0; step < 200 / TUNING.dt && !drop.captured && !drop.dead; step++) {
           drop.step(TUNING.dt * drop.timeScale)
-          for (const event of drop.pullEvents()) payouts += event.gears ?? 0
+          for (const event of drop.pullEvents()) payouts += event.points ?? 0
           assert.ok(Number.isFinite(drop.ball.x) && Number.isFinite(drop.ball.y) && Number.isFinite(drop.earned), 'A complete build must keep finite physics and score')
         }
         assert.ok(drop.captured || drop.dead, `${layout}/${id}/${ball.id}: the complete build must resolve`)

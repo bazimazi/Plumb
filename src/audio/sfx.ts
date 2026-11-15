@@ -230,4 +230,49 @@ export class Sfx {
       this.bell(1046, 0.3, 0.06, 0.07)
     } else this.tone(196, 0.22, 'triangle', 0.08, -60)
   }
+
+  /** The machine powers up: a bright rising fanfare over a warm swell. */
+  target(): void {
+    this.tone(98, 0.6, 'sine', 0.1, 98)
+    this.noise(0.4, 0.04, 2500, 0.05)
+    ;[523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => this.bell(f, 0.5, 0.075, i * 0.06))
+    this.tone(1568, 0.5, 'triangle', 0.03, 0, 0.32)
+  }
+
+  /** Each overcharge tier climbs a fifth higher than the last. */
+  overcharge(tier: number): void {
+    const base = 659.25 * Math.pow(1.5, Math.max(0, tier - 1))
+    ;[0, 4, 7, 12].forEach((s, i) => this.bell(base * Math.pow(2, s / 12), 0.34, 0.07, i * 0.04))
+    this.noise(0.22, 0.035, 5000, 0.12)
+  }
+
+  /** Landing under the target: a falling, hollow note rather than a hazard sting. */
+  short(): void {
+    this.tone(330, 0.36, 'triangle', 0.08, -170)
+    this.tone(165, 0.5, 'sine', 0.09, -60, 0.08)
+    this.noise(0.16, 0.05, 260, 0.04)
+  }
+
+  /** A tumble of coins, one clink per gear group. */
+  coins(n: number): void {
+    const count = Math.max(2, Math.min(9, Math.round(n / 3)))
+    for (let i = 0; i < count; i++) {
+      const f = 1900 + ((i * 397) % 900)
+      this.tone(f, 0.06, 'square', 0.018, f * 0.2, i * 0.045)
+      this.tone(f * 1.5, 0.05, 'sine', 0.02, 0, i * 0.045 + 0.01)
+    }
+  }
+
+  /** The next machine slides into place. */
+  intro(): void {
+    this.noise(0.45, 0.05, 900)
+    this.tone(70, 0.5, 'sine', 0.09, 50)
+    this.bell(392, 0.4, 0.05, 0.18)
+  }
+
+  /** A soft warning when a fall is heading home short of its target. */
+  warn(): void {
+    this.tone(440, 0.09, 'square', 0.03)
+    this.tone(440, 0.09, 'square', 0.03, 0, 0.14)
+  }
 }

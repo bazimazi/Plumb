@@ -30,6 +30,9 @@ export interface SimEvent {
   type: string
   x: number
   y: number
+  /** Score earned by this event. Points are the fall's performance, not money. */
+  points?: number
+  /** Currency for shops and events. Kept scarce and flat: never multiplied by combos. */
   gears?: number
   text?: string
   combo?: number
@@ -39,11 +42,23 @@ export interface SimEvent {
 
 export interface DropDamage {
   time: number
-  cause: 'spike' | 'gutter' | 'grinder-miss'
+  cause: 'spike' | 'gutter' | 'grinder-miss' | 'short'
   amount: number
 }
 
 const EMPTY: Cmd = { nudge: 0, flip: false, special: false, tilt: false, aimX: 0 }
+
+/**
+ * Every machine sets a score target. Reaching it powers the machine; doubling and tripling it
+ * overcharges for extra gears. Landing short of it safely costs one shell. Gears are the
+ * currency and stay flat, so the shop keeps its meaning whatever the score does.
+ */
+export const ECONOMY = {
+  pocketGears: { coin: 3, bonus: 6, jackpotCold: 8, jackpotHot: 16 },
+  targetGears: 8,
+  overchargeGears: 5,
+  overchargeTiers: 2,
+} as const
 
 export class Drop {
   readonly board: Board
@@ -85,7 +100,17 @@ export class Drop {
   gapTarget = 0
   integrity = 1
   integrityMax = 1
+  /** Points scored this fall. */
   earned = 0
+  /** Currency earned this fall: pockets, target bonuses and guardian bounties. */
+  gearsEarned = 0
+  /** The machine's score target; 0 means none (the Grinder and plain test boards). */
+  readonly target: number
+  targetMet = false
+  /** 0 = below or at target, 1 = x2 reached, 2 = x3 reached. */
+  overcharge = 0
+  /** Set when a safe landing fell short of the target and cost shell. */
+  short = false
   hazardThis = 0
   shatters = 0
   portals = 0
@@ -173,6 +198,7 @@ export class Drop {
     this.integrityMax = integrityMax
     this.gapT = board.gapStart
     this.gapTarget = board.gapStart
+    this.target = board.boss ? 0 : Math.max(0, Math.round(board.target ?? 0))
     const n = board.pegs.length
     this.flashPeg = new Float32Array(n)
     this.vanish = new Float32Array(n)
@@ -634,7 +660,7 @@ export class Drop {
     this.encounterComplete = true
     // This is a once-only guardian bounty, not a physical collision payout.
     // Neither rich boards, economy engines nor Overdrive multiply the award.
-    this.earned += encounter.bounty
+    this.gearsEarned += encounter.bounty
     this.events.push({ type: 'encounter-clear', x, y, text: t('{name} LINKED', { name: t(encounter.name).toUpperCase() }), gears: encounter.bounty, big: true })
   }
 
@@ -724,7 +750,7 @@ export class Drop {
       this.investments += 1
       this.earned -= RELICS['brass-ledger'].params.cost
       this.addMult(RELICS['brass-ledger'].params.mult)
-      this.events.push({ type: 'special', x, y, gears: -RELICS['brass-ledger'].params.cost, text: t('INVEST −2'), big: false })
+      this.events.push({ type: 'special', x, y, points: -RELICS['brass-ledger'].params.cost, text: t('INVEST −2'), big: false })
     }
     this.maybeFeather()
   }
@@ -835,9 +861,28 @@ export class Drop {
     const comboMult = 1 + Math.max(0, this.combo - 1) * TUNING.comboStep
     const bonus = this.profile.comboBonusAt && this.combo >= this.profile.comboBonusAt ? this.profile.comboBonusScale : 1
     const surge = physical && this.overdriveTime > 0 ? OVERDRIVE.payout : 1
-    const gears = Math.max(1, Math.round(base * comboMult * bonus * this.mult * this.profile.gearScale * this.board.payout * surge))
-    this.earned += gears
-    this.events.push({ type, x, y, gears, text: `+${gears}`, big, combo: this.combo })
+    const points = Math.max(1, Math.round(base * comboMult * bonus * this.mult * this.profile.gearScale * this.board.payout * surge))
+    this.earned += points
+    this.events.push({ type, x, y, points, text: `+${points}`, big, combo: this.combo })
+    this.checkTarget(x, y)
+  }
+
+  /** Announces the moment the score crosses the target and each overcharge tier. */
+  private checkTarget(x: number, y: number): void {
+    if (!this.target) return
+    if (!this.targetMet && this.earned >= this.target) {
+      this.targetMet = true
+      this.events.push({ type: 'target', x, y, text: t('TARGET MET'), big: true })
+    }
+    while (this.targetMet && this.overcharge < ECONOMY.overchargeTiers && this.earned >= this.target * (this.overcharge + 2)) {
+      this.overcharge += 1
+      this.events.push({ type: 'overcharge', x, y, text: t('OVERCHARGE ×{n}', { n: this.overcharge + 1 }), big: true })
+    }
+  }
+
+  /** Points still missing from the target, 0 once it is met. */
+  get shortfall(): number {
+    return this.target ? Math.max(0, this.target - this.earned) : 0
   }
 
   private maybeFeather(): void {
@@ -1042,26 +1087,31 @@ export class Drop {
       this.hazardThis += 1
       this.integrity -= 1
       this.recordDamage('gutter')
-      this.events.push({ type: 'pocket', x, y, text: t('GUTTER'), gears: 0 })
+      this.events.push({ type: 'pocket', x, y, text: t('GUTTER'), points: 0, gears: 0 })
       if (this.integrity <= 0) this.dead = true
     } else if (resolved === 'coin') {
-      const gears = Math.round(12 * this.board.payout)
-      this.earned += gears
-      this.events.push({ type: 'pocket', x, y, text: t('POCKET'), gears })
+      const points = Math.round(12 * this.board.payout)
+      this.earned += points
+      this.gearsEarned += ECONOMY.pocketGears.coin
+      this.events.push({ type: 'pocket', x, y, text: t('POCKET'), points, gears: ECONOMY.pocketGears.coin })
     } else if (resolved === 'bonus') {
-      const gears = Math.round(18 * this.mult * this.board.payout)
-      this.earned += gears
-      this.events.push({ type: 'pocket', x, y, text: t('RICH POCKET'), gears, big: this.mult >= 2 })
+      const points = Math.round(18 * this.mult * this.board.payout)
+      this.earned += points
+      this.gearsEarned += ECONOMY.pocketGears.bonus
+      this.events.push({ type: 'pocket', x, y, text: t('RICH POCKET'), points, gears: ECONOMY.pocketGears.bonus, big: this.mult >= 2 })
     } else if (resolved === 'jackpot') {
       const hot = this.mult >= TUNING.jackpotAt
-      const gears = Math.round((hot ? 40 : 22) * this.mult * this.board.payout)
-      this.earned += gears
+      const points = Math.round((hot ? 40 : 22) * this.mult * this.board.payout)
+      const gears = hot ? ECONOMY.pocketGears.jackpotHot : ECONOMY.pocketGears.jackpotCold
+      this.earned += points
+      this.gearsEarned += gears
       this.jackpot = hot
       this.events.push({
         type: hot ? 'jackpot' : 'pocket',
         x,
         y,
         text: hot ? t('JACKPOT') : t('COLD MAW'),
+        points,
         gears,
         big: true,
       })
@@ -1072,16 +1122,41 @@ export class Drop {
         const spec = RELICS['clean-contract'].params
         this.cleanBonus = Math.round(Math.min(spec.max, this.litOrder.length * spec.perPeg) * this.board.payout)
         this.earned += this.cleanBonus
-        if (this.cleanBonus > 0) this.events.push({ type: 'gold', x, y, gears: this.cleanBonus, text: t('CLEAN +{n}', { n: this.cleanBonus }), big: true })
+        if (this.cleanBonus > 0) this.events.push({ type: 'gold', x, y, points: this.cleanBonus, text: t('CLEAN +{n}', { n: this.cleanBonus }), big: true })
       }
       bonus = Math.round(bonus * this.board.payout)
       if (bonus > 0) {
         this.earned += bonus
-        this.events.push({ type: 'gold', x, y, gears: bonus, text: t('LANDING +{n}', { n: bonus }), big: false })
+        this.events.push({ type: 'gold', x, y, points: bonus, text: t('LANDING +{n}', { n: bonus }), big: false })
       }
+    }
+    if (!this.dead) {
+      this.checkTarget(x, y)
+      this.settleTarget(x, y, resolved === 'hazard')
     }
     this.ball.vx = 0
     this.ball.vy = 0
+  }
+
+  /**
+   * A safe landing settles the target: a power bonus when met, one shell when short.
+   * A gutter already costs shell, so it is never charged twice.
+   */
+  private settleTarget(x: number, y: number, gutter = false): void {
+    if (!this.target) return
+    if (this.targetMet) {
+      const gears = ECONOMY.targetGears + this.overcharge * ECONOMY.overchargeGears
+      this.gearsEarned += gears
+      this.events.push({ type: 'powered', x, y, gears, text: t('POWERED +{n}', { n: gears }) })
+      return
+    }
+    if (gutter) return
+    this.short = true
+    this.hazardThis += 1
+    this.integrity -= 1
+    this.recordDamage('short')
+    this.events.push({ type: 'short', x, y, text: t('SHORT · SHELL −1'), big: true })
+    if (this.integrity <= 0) this.dead = true
   }
 
   private recirculate(): void {
@@ -1121,7 +1196,7 @@ export class Drop {
       this.endOverdrive()
       this.ball.vx = 0
       this.ball.vy = 0
-      this.events.push({ type: 'pocket', x: this.ball.x, y: this.ball.y, text: t('THE GRINDER KEEPS YOU'), gears: 0 })
+      this.events.push({ type: 'pocket', x: this.ball.x, y: this.ball.y, text: t('THE GRINDER KEEPS YOU'), points: 0, gears: 0 })
       return
     }
     const core = this.board.bumpers.find((b) => b.core)

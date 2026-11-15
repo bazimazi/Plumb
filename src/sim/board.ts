@@ -88,6 +88,8 @@ export interface Board {
   boss: boolean
   jackpot: boolean
   encounter?: EncounterSpec
+  /** Points this machine asks for in one fall. Set by the expedition; 0 or absent means none. */
+  target?: number
 }
 
 export function gapCenter(board: Board, gapT: number): number {

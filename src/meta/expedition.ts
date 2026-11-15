@@ -47,12 +47,12 @@ export interface Commission {
 }
 
 export const COMMISSIONS: Commission[] = [
-  { id: 'chain', name: 'A singing machine', text: 'Reach a 12-hit combo in one drop.', stat: 'bestCombo', target: 12, gears: 45 },
-  { id: 'gold', name: 'Gold fever', text: 'Strike 12 gold pegs across the expedition.', stat: 'golds', target: 12, gears: 55 },
-  { id: 'survey', name: 'Chart the mechanism', text: 'Strike 70 pegs across the expedition.', stat: 'pegs', target: 70, gears: 45 },
-  { id: 'clean', name: 'An elegant descent', text: 'Land safely without damage in 3 drops.', stat: 'cleanDrops', target: 3, gears: 60 },
-  { id: 'fortune', name: 'A small fortune', text: 'Earn 1,500 score in the expedition.', stat: 'score', target: 1500, gears: 55 },
-  { id: 'jackpot', name: 'Wake the collector', text: 'Land one hot jackpot.', stat: 'jackpots', target: 1, gears: 80 },
+  { id: 'chain', name: 'A singing machine', text: 'Reach a 12-hit combo in one drop.', stat: 'bestCombo', target: 12, gears: 18 },
+  { id: 'gold', name: 'Gold fever', text: 'Strike 12 gold pegs across the expedition.', stat: 'golds', target: 12, gears: 20 },
+  { id: 'survey', name: 'Chart the mechanism', text: 'Strike 70 pegs across the expedition.', stat: 'pegs', target: 70, gears: 15 },
+  { id: 'clean', name: 'An elegant descent', text: 'Land safely without damage in 3 drops.', stat: 'cleanDrops', target: 3, gears: 22 },
+  { id: 'fortune', name: 'A small fortune', text: 'Earn 1,500 score in the expedition.', stat: 'score', target: 1500, gears: 18 },
+  { id: 'jackpot', name: 'Wake the collector', text: 'Land one hot jackpot.', stat: 'jackpots', target: 1, gears: 25 },
 ]
 
 export function commissionSet(seed: string): string[] {

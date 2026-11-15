@@ -3,7 +3,8 @@ import { BALL_LIST, RELIC_LIST, UPGRADE_LIST } from '../src/content/catalog'
 import { rngFor } from '../src/core/rng'
 import { TUNING } from '../src/tuning'
 import type { Board, Peg } from '../src/sim/board'
-import { Drop, type Cmd } from '../src/sim/drop'
+import { Drop, ECONOMY, type Cmd } from '../src/sim/drop'
+import { machineTarget } from '../src/game/target'
 import { createBoard } from '../src/sim/generate'
 import { computeProfile } from '../src/sim/profile'
 
@@ -131,7 +132,7 @@ check('Arc Coil chooses nearest unlit pegs, never recursively procs, and stops a
   assert.equal(d.pegs, 0, 'arc hits are not physical peg contacts')
   assert.equal(d.golds, 0)
   assert.equal(d.mult, 1)
-  assert.equal(d.events.filter((e) => e.gears).length, 9)
+  assert.equal(d.events.filter((e) => e.points).length, 9)
 })
 
 check('Velvet Fuse protects exactly one spike and preserves combo; Shock Absorber extends grace', () => {
@@ -210,9 +211,9 @@ check('Brass Ledger invests earned gears on five distinct contacts without creat
   assert.equal(d.investments, 5)
   assert.equal(d.mult, 1.6)
   assert.ok(d.earned >= 0)
-  const gross = d.events.reduce((sum, e) => sum + (e.gears ?? 0), 0)
+  const gross = d.events.reduce((sum, e) => sum + (e.points ?? 0), 0)
   assert.equal(d.earned, gross, 'controller payout events reconcile to the actual net drop earnings')
-  assert.equal(d.events.filter(e => e.gears === -2).length, 5)
+  assert.equal(d.events.filter(e => e.points === -2).length, 5)
   d.hitCd[0] = 0
   d.payCd[0] = 0
   strike(d, 0)
@@ -291,7 +292,7 @@ check('Shatter payout applies the economy scale exactly once', () => {
   strike(d, 0, 900)
   const paid = d.events.find((e) => e.type === 'shatter')
   assert.ok(d.profile.gearScale > 1)
-  assert.equal(paid?.gears, Math.round(8 * d.profile.gearScale))
+  assert.equal(paid?.points, Math.round(8 * d.profile.gearScale))
 })
 
 check('Compound Interest increases combo-six payouts by 20 percent', () => {
@@ -301,7 +302,7 @@ check('Compound Interest increases combo-six payouts by 20 percent', () => {
   strike(d, 0)
   assert.equal(d.combo, 6)
   const payout = d.events.find((e) => e.type === 'peg')
-  assert.equal(payout?.gears, Math.round(3 * (1 + 5 * TUNING.comboStep) * 1.2))
+  assert.equal(payout?.points, Math.round(3 * (1 + 5 * TUNING.comboStep) * 1.2))
 })
 
 check('Grinder misses consume finite shell, keep core progress, and cannot be shield-farmed', () => {
@@ -378,11 +379,68 @@ check('seeded full builds replay identically and settle with finite score', () =
     for (let i = 0; i < 120 * 82 && !d.captured && !d.dead; i++) d.step(TUNING.dt)
     assert.ok(d.captured || d.dead)
     assert.ok(Number.isFinite(d.earned) && d.earned >= 0)
-    assert.equal(d.events.reduce((sum, e) => sum + (e.gears ?? 0), 0), d.earned, 'all build payouts and investments reconcile')
+    assert.equal(d.events.reduce((sum, e) => sum + (e.points ?? 0), 0), d.earned, 'all build payouts and investments reconcile')
     assert.ok(d.arcPulses <= 3 && d.goldRefunds <= 3 && d.investments <= 5 && d.flywheelRewards <= 4)
     return [d.earned, d.mult, d.captured, d.integrity, d.pegs, d.portals, d.arcPulses, d.time]
   }
   assert.deepEqual(run(), run())
+})
+
+check('a score target is announced once, overcharges in two tiers, and pays flat gears on a safe landing', () => {
+  const pegs = Array.from({ length: 30 }, (_, i) => peg(100 + (i % 10) * 60, 200 + Math.floor(i / 10) * 80))
+  const d = make(arena({ pegs, target: 20 }))
+  assert.equal(d.target, 20)
+  for (let i = 0; i < pegs.length; i++) { d.comboTimer = 2; strike(d, i) }
+  const events = d.pullEvents()
+  assert.equal(events.filter(e => e.type === 'target').length, 1, 'the target is crossed once')
+  assert.equal(events.filter(e => e.type === 'overcharge').length, ECONOMY.overchargeTiers)
+  assert.ok(d.targetMet && d.overcharge === ECONOMY.overchargeTiers)
+  assert.ok(events.every(e => !e.gears), 'peg strikes pay points, never currency')
+  pocket(d)
+  const landing = d.pullEvents()
+  const powered = landing.find(e => e.type === 'powered')
+  assert.equal(powered?.gears, ECONOMY.targetGears + ECONOMY.overchargeTiers * ECONOMY.overchargeGears)
+  assert.equal(d.gearsEarned, ECONOMY.pocketGears.coin + powered!.gears!)
+  assert.equal(d.short, false)
+  assert.equal(d.integrity, d.integrityMax)
+})
+
+check('landing safely short of the target costs exactly one shell and records why', () => {
+  const d = make(arena({ target: 500 }))
+  pocket(d)
+  assert.equal(d.captured, 'coin')
+  assert.equal(d.short, true)
+  assert.equal(d.integrity, d.integrityMax - 1)
+  assert.deepEqual(d.damageHistory.map(x => x.cause), ['short'])
+  assert.equal(d.gearsEarned, ECONOMY.pocketGears.coin, 'the pocket still pays; no target bonus')
+  const last = make(arena({ target: 500 }))
+  last.integrity = 1
+  pocket(last)
+  assert.equal(last.dead, true, 'a short landing can take the final shell')
+})
+
+check('a gutter is never charged twice: it skips the short penalty but keeps a met target bonus', () => {
+  const short = make(arena({ target: 500 }))
+  pocket(short, 100)
+  assert.equal(short.captured, 'hazard')
+  assert.equal(short.integrity, short.integrityMax - 1)
+  assert.equal(short.short, false)
+  const met = make(arena({ pegs: [peg(400, 300)], target: 3 }))
+  strike(met, 0)
+  pocket(met, 100)
+  assert.equal(met.captured, 'hazard')
+  assert.equal(met.integrity, met.integrityMax - 1)
+  assert.equal(met.gearsEarned, ECONOMY.targetGears)
+})
+
+check('the Grinder and plain boards have no target; targets grow with depth, trial and circuit', () => {
+  assert.equal(make(arena({ boss: true, target: 999 })).target, 0)
+  assert.equal(make(arena()).target, 0)
+  const at = (depth: number, ascension = 0, loop = 0) => machineTarget({ layout: 'garden', depth, ascension, loop, payout: 1, boss: false })
+  for (let depth = 2; depth <= 9; depth++) assert.ok(at(depth) >= at(depth - 1))
+  assert.ok(at(5, 6) > at(5))
+  assert.ok(at(5, 0, 2) > at(5))
+  assert.equal(machineTarget({ layout: 'grinder', depth: 10, ascension: 0, loop: 0, payout: 1, boss: true }), 0)
 })
 
 console.log(`${checks} build and physics checks passed.`)

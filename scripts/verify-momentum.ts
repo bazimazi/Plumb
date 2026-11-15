@@ -140,7 +140,7 @@ check('surge doubles physical collision value without doubling relic lightning o
   d.step(TUNING.dt)
   assert.equal(d.earned - landingBefore, 12)
   assert.equal(d.overdriveTime, 0, 'settling ends the visual surge immediately')
-  assert.equal(d.events.reduce((sum, e) => sum + (e.gears ?? 0), 0), d.earned)
+  assert.equal(d.events.reduce((sum, e) => sum + (e.points ?? 0), 0), d.earned)
 })
 
 check('three-second surge freezes normal combo decay, expires once, and allows ordinary decay again', () => {
@@ -252,7 +252,7 @@ check('seeded real machines provide reachable energy, finite active physics and 
           ready ||= run.overdriveReady
           const target = board.w * (run.overdriveUses % 2 ? 0.65 : 0.35)
           run.step(TUNING.dt * run.timeScale, { ...empty, aimX: target, overdrive: run.overdriveReady })
-          for (const event of run.pullEvents()) score += event.gears ?? 0
+          for (const event of run.pullEvents()) score += event.points ?? 0
           assert.ok(Number.isFinite(run.ball.x) && Number.isFinite(run.ball.y) && Number.isFinite(run.ball.vx) && Number.isFinite(run.ball.vy))
           assert.ok(run.charge >= 0 && run.charge <= 1)
           assert.ok(run.overdriveUses <= 2 && run.overdriveTime <= 3 && run.overdriveTime >= 0)

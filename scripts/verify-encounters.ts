@@ -98,7 +98,7 @@ check('Bellkeeper accepts each physical relay once in any order and linked bells
   assert.equal(d.encounterComplete, true)
   assert.deepEqual(d.encounterTargets, [])
   assert.equal(d.events.filter(e => e.type === 'encounter-clear').length, 1)
-  assert.equal(d.events.find(e => e.type === 'encounter-clear')!.gears, 70)
+  assert.equal(d.events.find(e => e.type === 'encounter-clear')!.gears, ENCOUNTERS.bellkeeper.bounty)
   assert.equal(d.wonBoss, false)
   assert.equal(d.coreHits, 0)
 })
@@ -196,7 +196,7 @@ check('guardian bounties remain flat and once-only under extreme payout, builds 
     const awards = d.events.filter(e => e.type === 'encounter-clear')
     assert.equal(awards.length, 1)
     assert.equal(awards[0].gears, ENCOUNTERS[id].bounty)
-    assert.equal(d.events.reduce((total, e) => total + (e.gears ?? 0), 0), d.earned)
+    assert.equal(d.events.reduce((total, e) => total + (e.points ?? 0), 0), d.earned)
     pocket(d)
     assert.equal(d.encounterReturns, 0, 'a completed objective needs no return')
     assert.equal(d.wonBoss, false)
@@ -308,7 +308,7 @@ check('all spheres can physically reach both guardian objectives with finite leg
           let payouts = 0
           for (let tick = 0; tick < 120 * 85 && !d.captured && !d.dead; tick++) {
             d.step(TUNING.dt * d.timeScale, seed % 2 ? pilot(d) : empty)
-            for (const event of d.pullEvents()) payouts += event.gears ?? 0
+            for (const event of d.pullEvents()) payouts += event.points ?? 0
             assert.ok(Number.isFinite(d.ball.x) && Number.isFinite(d.ball.y) && Number.isFinite(d.ball.vx) && Number.isFinite(d.ball.vy))
             assert.ok(d.encounterProgress <= ENCOUNTERS[id].required && d.encounterReturns <= 1)
             assert.ok(d.nudges >= 0 && d.nudges <= d.maxNudges && d.overdriveUses <= 2)
@@ -349,7 +349,7 @@ check('late builds, strongest anomalies and cumulative trials keep guardian resu
     let awards = 0
     for (let tick = 0; tick < 120 * 100 && !d.dead && !d.captured; tick++) {
       d.step(TUNING.dt * d.timeScale, pilot(d))
-      for (const e of d.pullEvents()) { payout += e.gears ?? 0; awards += Number(e.type === 'encounter-clear') }
+      for (const e of d.pullEvents()) { payout += e.points ?? 0; awards += Number(e.type === 'encounter-clear') }
       assert.ok(Number.isFinite(d.ball.x) && Number.isFinite(d.ball.y) && Number.isFinite(d.earned))
     }
     assert.ok(d.dead || d.captured)

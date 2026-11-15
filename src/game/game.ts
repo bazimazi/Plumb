@@ -10,19 +10,20 @@ import { shareBase } from '../platform'
 import { type Cam, machineScale, screenToWorld } from '../render/camera'
 import { drawFrame, type Floater, type Particle, type Ring } from '../render/draw'
 import { pegPose, type Board, type BinKind } from '../sim/board'
-import { Drop, previewPath, type Cmd } from '../sim/drop'
+import { Drop, previewPath, type Cmd, type SimEvent } from '../sim/drop'
 import { describeDrop, type DropReport } from '../sim/report'
 import { createBoard, demoBoard } from '../sim/generate'
 import { ANOMALIES, applyAnomaly } from '../sim/anomaly'
 import { applyEncounter } from '../sim/encounter'
 import { computeProfile, type Profile } from '../sim/profile'
-import { RESEARCH_ORDER, STARTER_RELICS, TUNING } from '../tuning'
+import { ECON, RESEARCH_ORDER, STARTER_RELICS, TUNING } from '../tuning'
 import { createRoute, type GameNode } from './route'
+import { machineTarget } from './target'
 import { PRACTICE_BUILDS, PRACTICE_MACHINES, copyRecipe, practiceRecipe, recipeMachine, type PracticeRecipe } from './laboratory'
 import { randomFrom, rollReward, rollShop, type Offer } from './offers'
 import { Haptics, type HapticCue } from '../haptics'
 import { DAILY_QUEST_REWARD, FEATS, FINISHES, NO_BONUS, STAR_NODES, WEEKLY_QUEST_REWARD, addXp, advanceQuests, toRoman, chartBonuses, dayKey, depthBounty, featProgress, featReward, finishFor, masteryXp, questDefs, rankReward, rankTitle, rankXp, starCost, starNode, stardustFor, weekKey, xpFor, type ChartBonuses, type QuestDef, type QuestStat } from '../meta/progression'
-import { LOCALES, isLocale, list as joinList, locale, setLocale, source, t } from '../i18n'
+import { LOCALES, isLocale, locale, setLocale, source, t } from '../i18n'
 import { UI, type ChoiceCard, type ProgressModel, type HudModel, type StageModel, type SummaryModel, type ViewModel } from '../ui/ui'
 
 /** Screens whose state is fully captured by an expedition checkpoint. */
@@ -119,6 +120,22 @@ export class Game {
   private reveal: { name: string; text: string; tags: string } | null = null
   private resolveCopy = { title: 'Settled', sub: '' }
   private resolveT = 0
+  /** Salvage paid by a calm machine this fall, shown on the result. */
+  private salvagePaid = 0
+  /** Gears earned during the current fall, by source, for the result card. */
+  private fallGears: { label: string; n: number }[] = []
+  /** The fall is heading home short of its target; warned once per fall. */
+  private danger = false
+  /** Machine title card shown as a new machine slides in. */
+  private intro: { key: number; kicker: string; title: string; target: number; anomaly: string; reward: string; t: number } | null = null
+  private introKey = 0
+  /** Gears earned in world space, waiting for the UI to fly them to the wallet. */
+  private coinQueue: { x: number; y: number; n: number }[] = []
+  /** Spring offsets for struck pegs: x, y, vx, vy per peg. Presentation only. */
+  private pegKick: Float32Array | null = null
+  private pegFlashSeen: Float32Array | null = null
+  private canvasTop = 0
+  private canvasLeft = 0
   private draftSeed = ''
   private draftAscension = 0
   private sharedBall = ''
@@ -271,6 +288,8 @@ export class Game {
     const r = this.canvas.getBoundingClientRect()
     this.cssW = r.width
     this.cssH = r.height
+    this.canvasTop = r.top
+    this.canvasLeft = r.left
     this.dpr = Math.min(this.dprCap, this.qualityCeiling())
     this.canvas.width = Math.max(1, Math.floor(this.cssW * this.dpr))
     this.canvas.height = Math.max(1, Math.floor(this.cssH * this.dpr))
@@ -465,6 +484,13 @@ export class Game {
       this.resolveT -= dt
       if (this.resolveT <= 0) this.skipResolve()
     }
+    if (this.intro) {
+      // A launch or any other screen dismisses the title card early.
+      this.intro.t -= this.screen === 'aim' ? dt : dt * 6
+      if (this.intro.t <= 0) this.intro = null
+    }
+    this.springPegs(dt)
+    this.watchTarget()
     const target = this.cameraTarget()
     if (this.snapCam) {
       this.camY = target
@@ -543,6 +569,7 @@ export class Game {
       floaters: demo ? [] : this.floaters,
       rings: demo || this.motionQuery.matches || !this.save.settings.particles ? [] : this.rings,
       popT: demo ? null : this.popT,
+      pegKick: demo ? null : this.pegKick,
       launchKick: demo ? 0 : this.launchKick,
       warp: this.warp,
       multHot: !!drop && drop.mult >= TUNING.jackpotAt,
@@ -829,15 +856,13 @@ export class Game {
     this.checkpoint()
   }
 
-  private beginAim(node: GameNode): void {
-    const run = this.run
-    if (!run) return
+  /** The seeded machine for a route node, with trial, circuit and target applied. No side effects. */
+  private machineBoard(node: GameNode, run: Run): Board {
     // Guidance is contextual; board generation never depends on a player's save.
-    const tutorial = false
     const board = createBoard({
       layout: node.layout,
       title: node.title,
-      tutorial,
+      tutorial: false,
       rng: rngFor(run.seed, `board:${run.loop}:${node.id}:${run.boardNonce}`),
     })
     const anomaly = this.nodeAnomaly(node)
@@ -847,8 +872,41 @@ export class Game {
     if (run.ascension >= 4) board.gapWidth *= 0.84
     board.payout *= 1 + run.ascension * 0.1 + Math.min(10, run.loop) * 0.18
     if (run.ascension >= 13) board.payout *= 0.85
+    // The target follows trial and circuit pressure, never the Star Chart, so permanent yield helps.
+    board.target = machineTarget({ layout: node.layout, depth: node.depth, ascension: run.ascension, loop: run.loop, payout: board.payout, boss: node.kind === 'boss' })
     board.payout *= 1 + this.bonuses().yield
     if (node.encounter) applyEncounter(board, node.encounter)
+    return board
+  }
+
+  private previewCache = new Map<string, { target: number; reward: string }>()
+
+  /** What a fork option leads to: the next machine's target and what surviving it pays. */
+  private forkPreview(nextId: string): { target: number; reward: string } {
+    const key = `${this.run?.seed}:${this.run?.loop}:${this.run?.ascension}:${this.run?.boardNonce}:${nextId}:${locale()}`
+    const hit = this.previewCache.get(key)
+    if (hit) return hit
+    const value = this.computeForkPreview(nextId)
+    if (this.previewCache.size > 32) this.previewCache.clear()
+    this.previewCache.set(key, value)
+    return value
+  }
+
+  private computeForkPreview(nextId: string): { target: number; reward: string } {
+    const run = this.run
+    let node = run?.nodes[nextId]
+    // Services sit between a fork and its machine; look through them to the next fall.
+    for (let hops = 0; node && run && hops < 4 && node.kind !== 'drop' && node.kind !== 'boss'; hops++) node = node.next ? run.nodes[node.next] : undefined
+    if (!run || !node || node.kind !== 'drop') return { target: 0, reward: '' }
+    const target = this.machineBoard(node, run).target ?? 0
+    const reward = node.reward === 'relic' ? t('Survive: choose a relic') : node.reward === 'upgrade' ? t('Survive: choose an upgrade') : node.encounter ? t('Guardian · relic on completion') : t('Survive: +{n} salvage gears', { n: ECON.salvage })
+    return { target, reward }
+  }
+
+  private beginAim(node: GameNode): void {
+    const run = this.run
+    if (!run) return
+    const board = this.machineBoard(node, run)
     this.recompute()
     for (const feature of this.practice ? [] : board.features) {
       if (!this.save.seenParts.includes(feature)) this.save.seenParts.push(feature)
@@ -861,6 +919,15 @@ export class Game {
       boardNonce: run.boardNonce, rules: run.rules, mode: run.mode, matched: true,
     }
     this.popT = new Float32Array(board.pegs.length)
+    this.pegKick = new Float32Array(board.pegs.length * 4)
+    this.pegFlashSeen = new Float32Array(board.pegs.length)
+    this.danger = false
+    this.coinQueue = []
+    this.fallGears = []
+    const anomalyId = this.nodeAnomaly(node)
+    const reward = this.practice || node.kind === 'boss' ? '' : node.reward === 'relic' ? t('Survive: choose a relic') : node.reward === 'upgrade' ? t('Survive: choose an upgrade') : node.encounter ? t('Guardian · relic on completion') : t('Survive: +{n} salvage gears', { n: ECON.salvage })
+    this.intro = { key: ++this.introKey, kicker: t(node.kicker), title: t(node.title), target: board.target ?? 0, anomaly: anomalyId ? t(ANOMALIES[anomalyId].name) : '', reward, t: 2.3 }
+    this.sfx.intro()
     this.cash = null
     this.rings = []
     this.floaters = []
@@ -905,6 +972,8 @@ export class Game {
     if (drop.goldAfterFlip) run.flipGold = true
     if (drop.jackpot) run.jackpots += 1
     if (!drop.dead && drop.hazardThis === 0 && drop.captured && drop.captured !== 'hazard') { run.cleanDrop = true; run.cleanDrops++ }
+    // Calm machines without a draft pay out salvage, so the safe road funds the shop.
+    if (!drop.dead && node.kind === 'drop' && !node.reward && !drop.encounterComplete) { run.gears += ECON.salvage; this.salvagePaid = ECON.salvage } else this.salvagePaid = 0
     if (drop.wonBoss) { run.bossWin = true; run.clears++ }
     this.save.lifetime.pegs += drop.pegs
     this.save.lifetime.golds += drop.golds
@@ -913,9 +982,10 @@ export class Game {
     for (const commission of fulfilled) {
       run.claimed.push(commission.id)
       run.gears += commission.gears
-      run.score += commission.gears
+      this.fallGears.push({ label: t('Commission · {name}', { name: t(commission.name) }), n: commission.gears })
       if (!drop.dead) run.integrity = Math.min(run.integrityMax, run.integrity + 1)
     }
+    if (this.salvagePaid) this.fallGears.push({ label: t('Salvage'), n: this.salvagePaid })
     drop.hitstop = 0
     const win = drop.wonBoss
     const boss = node.kind === 'boss'
@@ -923,16 +993,20 @@ export class Game {
     else if (win && drop.captured === 'jackpot') this.resolveCopy = { title: t('The Grinder falls'), sub: t('The maw was cold. The core is still broken.') }
     else if (win) this.resolveCopy = { title: t('The Grinder falls'), sub: t('You broke the core and missed the maw.') }
     else if (boss) this.resolveCopy = { title: t('The Grinder keeps you'), sub: t('{n} of 5 hits.', { n: drop.coreHits }) }
-    else if (drop.dead) this.resolveCopy = { title: t('The shell opens'), sub: t('The fall ends.') }
+    else if (drop.dead) this.resolveCopy = { title: t('The shell opens'), sub: drop.short ? t('The fall landed short of its target.') : t('The fall ends.') }
     else if (drop.encounterComplete && drop.board.encounter) this.resolveCopy = { title: t('{name} linked', { name: t(drop.board.encounter.name) }), sub: t('+{n} guardian gears earned · choose a relic', { n: drop.board.encounter.bounty }) }
+    else if (drop.short) this.resolveCopy = { title: t('Short of target'), sub: '' }
     else if (drop.board.encounter) this.resolveCopy.sub = t('{progress}/{required} relays linked · the route continues', { progress: drop.encounterProgress, required: drop.board.encounter.required })
     else this.resolveCopy = { title: this.resolveCopy.title || t('Settled'), sub: [this.resolveCopy.sub, drop.hazardThis === 0 ? t('clean drop') : ''].filter(Boolean).join(' · ') }
-    if (fulfilled.length) this.resolveCopy.sub += ` · ${t('Commission complete: {list}', { list: joinList(fulfilled.map(c => t(drop.dead ? '{name} (+{n} gears)' : '{name} (+{n} gears, mend 1 shell)', { name: t(c.name), n: c.gears }))) })}`
+    // A short landing always says so, whatever else the fall achieved.
+    if (drop.short && !drop.dead) this.resolveCopy.sub = [this.resolveCopy.sub, t('Short by {n} · the machine takes 1 shell', { n: (drop.target - drop.earned).toLocaleString('en-US') })].filter(Boolean).join(' · ')
+    if (fulfilled.length && !drop.dead) this.resolveCopy.sub = [this.resolveCopy.sub, t('Commission complete · mend 1 shell')].filter(Boolean).join(' · ')
     this.screen = 'resolve'
     const lit = drop.litOrder.filter((i) => !drop.gone[i])
     const step = clamp(0.95 / Math.max(1, lit.length), 0.022, 0.07)
     this.cash = { order: lit, next: 0, t: -0.18, step }
-    this.resolveT = Math.max(drop.jackpot || win ? 1.6 : 1, lit.length * step + 0.75)
+    // Long enough to read the score against the target and the gears it paid; any click skips.
+    this.resolveT = Math.max(drop.jackpot || win ? 2.4 : 2.1, lit.length * step + 0.9)
     this.toast = null
   }
 
@@ -1022,20 +1096,20 @@ export class Game {
         this.recompute()
         this.say(t(relic.name), t('The bargain keeps its word.'), 1.4, true)
       } else {
-        run.gears += 28
+        run.gears += ECON.bargainEmpty
         this.say(t('Empty hands'), t('No new relic. The machine pays scrap.'), 1.2, false)
       }
     } else if (which === 'pay') {
-      if (run.gears < 30) return
-      run.gears -= 30
+      if (run.gears < ECON.bargainPay) return
+      run.gears -= ECON.bargainPay
       const up = randomFrom('upgrade', run.ballId, run.upgrades, run.relics, run.catalogue, run.seed, `bargain-up:${run.loop}:${run.nodeId}`)
       if (up) {
         run.upgrades.push(up.id)
         this.recompute()
         this.say(t(up.name), t('Installed without asking.'), 1.3, false)
-      } else run.gears += 30
+      } else run.gears += ECON.bargainPay
     } else {
-      run.gears += 18
+      run.gears += ECON.bargainWalk
     }
     this.advance()
   }
@@ -1049,8 +1123,8 @@ export class Game {
       run.integrity = Math.min(run.integrityMax, run.integrity + amount)
       this.say(t('Mended'), amount >= 99 ? t('The next act begins with a whole shell.') : t('Restore up to {n} shell.', { n: amount }), 1, false)
     } else {
-      run.gears += 12
-      this.say(t('Already whole'), t('You pocket 12 gears of scrap.'), 1, false)
+      run.gears += ECON.scrap
+      this.say(t('Already whole'), t('You pocket {n} gears of scrap.', { n: ECON.scrap }), 1, false)
     }
     this.sfx.ui()
     this.advance()
@@ -1234,6 +1308,8 @@ export class Game {
     this.floaters = []
     this.warp = 1
     this.returnTo = 'hub'
+    this.intro = null
+    this.coinQueue = []
     this.spawnDemo()
     this.snapCam = true
   }
@@ -1385,7 +1461,7 @@ export class Game {
     if (!run) return []
     const ball = ballById(run.ballId)
     const act = run.nodes[run.nodeId]?.sector ?? 1
-    return rollShop(run.ballId, ball.primary, run.upgrades, run.relics, run.catalogue, run.seed, `shop:${run.loop}:${run.nodeId}:${this.rerolls}`).map(o => ({ ...o, price: Math.round(o.price * (1 + (act - 1) * 1.1) * (run.ascension >= 3 ? 1.25 : 1) * (run.ascension >= 11 ? 1.2 : 1) * (1 + Math.min(10, run.loop) * 0.12) * (1 - this.bonuses().discount)) }))
+    return rollShop(run.ballId, ball.primary, run.upgrades, run.relics, run.catalogue, run.seed, `shop:${run.loop}:${run.nodeId}:${this.rerolls}`).map(o => ({ ...o, price: Math.round(o.price * (1 + (act - 1) * ECON.actPrice) * (run.ascension >= 3 ? 1.25 : 1) * (run.ascension >= 11 ? 1.2 : 1) * (1 + Math.min(10, run.loop) * 0.12) * (1 - this.bonuses().discount)) }))
   }
 
   private continueCircuit(): void {
@@ -1415,7 +1491,7 @@ export class Game {
   private rerollCost(): number { return this.rerolls < this.bonuses().rerolls ? 0 : TUNING.shopReroll }
 
   private shopRepairCost(): number {
-    return Math.round(35 * (this.run?.nodes[this.run.nodeId]?.sector ?? 1) * (1 - this.bonuses().repair))
+    return Math.round((ECON.repairBase + ECON.repairPerAct * (this.run?.nodes[this.run.nodeId]?.sector ?? 1)) * (1 - this.bonuses().repair))
   }
 
   private eventModel(): { title: string; story: string; cards: ChoiceCard[] } {
@@ -1436,23 +1512,23 @@ export class Game {
       title = t('The Resonance Chamber')
       story = t('The machine can copy a heartbeat. It asks for a little of yours.')
       choices = [
-        { name: relic ? relicName : t('A hollow echo'), text: relic ? t('Lose 1 shell. Gain {name}: {text}', { name: relicName, text: relicText }) : t('No relics remain. Take 60 gears instead.'), afford: !relic || run.integrity > 1, tags: tags(t('Risk'), t('relic')) },
-        { name: upgrade ? upgradeName : t('Spare components'), text: upgrade ? t('Install {name} for free. {text}', { name: upgradeName, text: upgradeText }) : t('All upgrades installed. Take 40 gears.'), afford: true, tags: t('Upgrade') },
-        { name: t('Quiet the chamber'), text: t('Restore 1 shell and take 15 gears.'), afford: true, tags: t('Recovery') },
+        { name: relic ? relicName : t('A hollow echo'), text: relic ? t('Lose 1 shell. Gain {name}: {text}', { name: relicName, text: relicText }) : t('No relics remain. Take {n} gears instead.', { n: ECON.resonanceEmptyRelic }), afford: !relic || run.integrity > 1, tags: tags(t('Risk'), t('relic')) },
+        { name: upgrade ? upgradeName : t('Spare components'), text: upgrade ? t('Install {name} for free. {text}', { name: upgradeName, text: upgradeText }) : t('All upgrades installed. Take {n} gears.', { n: ECON.resonanceEmptyUpgrade }), afford: true, tags: t('Upgrade') },
+        { name: t('Quiet the chamber'), text: t('Restore 1 shell and take {n} gears.', { n: ECON.resonanceQuiet }), afford: true, tags: t('Recovery') },
       ]
     } else if (event === 'oracle') {
       title = t('The Blind Astrolabe')
       story = t('Three futures orbit a lens. Only the one you choose becomes real.')
       choices = [
-        { name: relic ? relicName : t('The empty shelf'), text: relic ? t('Pay 50 gears. Gain {name}: {text}', { name: relicName, text: relicText }) : t('No relics remain. Take 60 gears.'), afford: !relic || run.gears >= 50, tags: tags(t('{n} gears', { n: 50 }), t('relic')) },
-        { name: t('A gentler future'), text: t('Pay 20 gears to restore 2 shell.'), afford: run.gears >= 20 && run.integrity < run.integrityMax, tags: tags(t('{n} gears', { n: 20 }), t('recovery')) },
-        { name: t('Cast the brass die'), text: t('Take 18 gears, with a 1 in 4 chance of 110 gears instead. The seed fixes the outcome.'), afford: true, tags: t('Fortune') },
+        { name: relic ? relicName : t('The empty shelf'), text: relic ? t('Pay {n} gears. Gain {name}: {text}', { n: ECON.oracleRelic, name: relicName, text: relicText }) : t('No relics remain. Take {n} gears.', { n: ECON.resonanceEmptyRelic }), afford: !relic || run.gears >= ECON.oracleRelic, tags: tags(t('{n} gears', { n: ECON.oracleRelic }), t('relic')) },
+        { name: t('A gentler future'), text: t('Pay {n} gears to restore 2 shell.', { n: ECON.oracleHeal }), afford: run.gears >= ECON.oracleHeal && run.integrity < run.integrityMax, tags: tags(t('{n} gears', { n: ECON.oracleHeal }), t('recovery')) },
+        { name: t('Cast the brass die'), text: t('Take {low} gears, with a 1 in 4 chance of {high} gears instead. The seed fixes the outcome.', { low: ECON.oracleDieLow, high: ECON.oracleDieHigh }), afford: true, tags: t('Fortune') },
       ]
     } else {
       choices = [
-        { name: t('Patch the shell'), text: t('Restore 2 shell. If already whole, take 20 gears.'), afford: true, tags: t('Recovery') },
-        { name: upgrade ? upgradeName : t('Useful scrap'), text: upgrade ? t('Pay 20 gears. Install {name}: {text}', { name: upgradeName, text: upgradeText }) : t('All upgrades installed. Take 40 gears.'), afford: !upgrade || run.gears >= 20, tags: tags(t('{n} gears', { n: 20 }), t('upgrade')) },
-        { name: t('Sell the wreckage'), text: t('Take 70 gears for the next shop.'), afford: true, tags: t('Economy') },
+        { name: t('Patch the shell'), text: t('Restore 2 shell. If already whole, take {n} gears.', { n: ECON.salvagePatch }), afford: true, tags: t('Recovery') },
+        { name: upgrade ? upgradeName : t('Useful scrap'), text: upgrade ? t('Pay {n} gears. Install {name}: {text}', { n: ECON.salvageUpgrade, name: upgradeName, text: upgradeText }) : t('All upgrades installed. Take {n} gears.', { n: ECON.resonanceEmptyUpgrade }), afford: !upgrade || run.gears >= ECON.salvageUpgrade, tags: tags(t('{n} gears', { n: ECON.salvageUpgrade }), t('upgrade')) },
+        { name: t('Sell the wreckage'), text: t('Take {n} gears for the next shop.', { n: ECON.salvageSell }), afford: true, tags: t('Economy') },
       ]
     }
     return { title, story, cards: choices.map((c, index) => ({ ...c, synergy: '', price: 0, index })) }
@@ -1469,22 +1545,22 @@ export class Game {
         else { run.relics.push(offer.id); if (!this.save.seenRelics.includes(offer.id)) this.save.seenRelics.push(offer.id) }
         this.recompute()
         this.say(t(offer.name), t('A different future takes shape.'), 1.4, false)
-      } else run.gears += kind === 'relic' ? 60 : 40
+      } else run.gears += kind === 'relic' ? ECON.resonanceEmptyRelic : ECON.resonanceEmptyUpgrade
       return !!offer
     }
     const heal = (amount: number) => { run.integrity = Math.min(run.integrityMax, run.integrity + amount) }
     if (event === 'resonance') {
       if (index === 0) { if (gift('relic')) run.integrity = Math.max(1, run.integrity - 1) }
       else if (index === 1) gift('upgrade')
-      else { heal(1); run.gears += 15 }
+      else { heal(1); run.gears += ECON.resonanceQuiet }
     } else if (event === 'oracle') {
-      if (index === 0) { if (gift('relic')) run.gears -= 50 }
-      else if (index === 1) { run.gears -= 20; heal(2) }
-      else run.gears += rngFor(run.seed, `oracle:${run.loop}:${run.nodeId}`)() < 0.25 ? 110 : 18
+      if (index === 0) { if (gift('relic')) run.gears -= ECON.oracleRelic }
+      else if (index === 1) { run.gears -= ECON.oracleHeal; heal(2) }
+      else run.gears += rngFor(run.seed, `oracle:${run.loop}:${run.nodeId}`)() < 0.25 ? ECON.oracleDieHigh : ECON.oracleDieLow
     } else {
-      if (index === 0) { if (run.integrity === run.integrityMax) run.gears += 20; else heal(2) }
-      else if (index === 1) { if (gift('upgrade')) run.gears -= 20 }
-      else run.gears += 70
+      if (index === 0) { if (run.integrity === run.integrityMax) run.gears += ECON.salvagePatch; else heal(2) }
+      else if (index === 1) { if (gift('upgrade')) run.gears -= ECON.salvageUpgrade }
+      else run.gears += ECON.salvageSell
     }
     this.sfx.ui()
     this.advance()
@@ -1546,14 +1622,15 @@ export class Game {
     if (!drop || !run) return
     for (const e of drop.pullEvents()) {
       if (e.type === 'nudge' && run.nodeId === 'workshop') this.workshopNudged = true
+      if (e.points) run.score += e.points
       if (e.gears) {
         run.gears += e.gears
-        run.score += e.gears
+        if (e.gears > 0) this.fallGears.push({ label: this.gearLabel(e), n: e.gears })
       }
       if (e.combo) run.bestCombo = Math.max(run.bestCombo, e.combo)
       if (e.mult) run.bestMult = Math.max(run.bestMult, this.drop?.mult ?? e.mult)
       if (e.type === 'pocket' || e.type === 'jackpot') {
-        this.resolveCopy = { title: e.text || t('Settled'), sub: e.gears ? t('+{n} gears', { n: e.gears }) : '' }
+        this.resolveCopy = { title: e.text || t('Settled'), sub: '' }
       }
       // Relay contacts have their own musical cue rather than two stacked hits.
       const relayBumper = e.type === 'bumper' && drop.board.bumpers.some(b => b.relay != null && b.x === e.x && b.y === e.y)
@@ -1562,18 +1639,31 @@ export class Game {
     run.integrity = drop.integrity
   }
 
-  private react(e: { type: string; x: number; y: number; text?: string; gears?: number; big?: boolean; combo?: number; mult?: number }): void {
+  private gearLabel(e: SimEvent): string {
+    if (e.type === 'powered') {
+      const tier = this.drop?.overcharge ?? 0
+      return tier >= 2 ? t('Target ×3') : tier >= 1 ? t('Target ×2') : t('Target bonus')
+    }
+    if (e.type === 'encounter-clear') return t('Guardian bounty')
+    if (e.type === 'jackpot') return t('Jackpot')
+    const kind = this.drop?.captured
+    return kind === 'bonus' ? t('Rich pocket') : kind === 'jackpot' ? t('Cold maw') : t('Safe pocket')
+  }
+
+  private react(e: SimEvent): void {
     const big = !!e.big
     const pal = e.type.startsWith('overdrive') ? '#80ffe0' : e.type === 'hazard' || e.type === 'shatter-ball' ? '#ff6b5a' : e.type === 'gold' || e.type === 'jackpot' || e.type === 'crit' ? '#ffd56a' : '#f4efe4'
     const accent = this.drop?.ballDef.accent ?? '#7ee0c6'
     const fx = this.save.settings.particles && !this.motionQuery.matches
     // Floating text arrives translated; compare against its English source.
     const arc = e.type === 'crit' && !!e.text && source(e.text) === 'CHAIN LIGHTNING'
-    const relayEvent = e.type.startsWith('relay-') || e.type === 'encounter-clear' || e.type === 'recirculate'
+    const relayEvent = e.type.startsWith('relay-') || e.type === 'encounter-clear' || e.type === 'recirculate' || e.type === 'powered'
     if (e.type === 'overdrive-start') this.floaters = this.floaters.filter(f => (f.size ?? 18) <= 22)
-    if (e.text && !e.type.startsWith('overdrive') && !relayEvent && !arc && (e.gears || big || e.type === 'refund' || e.type === 'special')) {
-      const size = e.type === 'jackpot' ? 40 : big ? 28 : e.type === 'gold' ? 22 : e.gears && e.gears >= 20 ? 21 : 17
-      this.addFeedback(e, e.text, pal, size, big || e.type === 'refund' || e.type === 'special')
+    if (e.text && !e.type.startsWith('overdrive') && !relayEvent && !arc && (e.points || big || e.type === 'refund' || e.type === 'special')) {
+      const size = e.type === 'jackpot' || e.type === 'target' ? 40 : e.type === 'overcharge' ? 32 : big ? 28 : e.type === 'gold' ? 22 : e.points && e.points >= 40 ? 23 : e.points && e.points >= 15 ? 20 : 17
+      const color = e.type === 'target' ? '#ffd56a' : e.type === 'overcharge' ? '#ff9fe0' : e.type === 'short' ? '#ff6b5a'
+        : e.type === 'peg' && (e.combo ?? 0) >= 15 ? '#ff9fe0' : e.type === 'peg' && (e.combo ?? 0) >= 8 ? '#9ff5ff' : pal
+      this.addFeedback(e.type === 'target' || e.type === 'overcharge' ? (this.drop?.ball ?? e) : e, e.text, color, size, big || e.type === 'refund' || e.type === 'special')
     }
     if (e.type === 'mult' && e.mult) {
       this.addFeedback(e, formatMult(e.mult), '#ffd56a', 15)
@@ -1625,16 +1715,30 @@ export class Game {
         this.sparks(e.x, e.y, accent, 6, 160, e.text === '◀' ? 0 : Math.PI, 0.5)
       } else if (e.type === 'collapse') {
         this.burst(e.x, e.y, '#d5dee3', 10, 120)
+      } else if (e.type === 'target') {
+        const b = this.drop?.ball ?? e
+        this.ring(b.x, b.y, 18, 340, 0.85, '#ffd56a', 9)
+        this.ring(b.x, b.y, 10, 200, 0.6, '#ffffff', 4)
+        this.sparks(b.x, b.y, '#ffd56a', 40, 560, -Math.PI / 2, Math.PI)
+        this.burst(b.x, b.y, '#fff3c4', 18, 240)
+      } else if (e.type === 'overcharge') {
+        const b = this.drop?.ball ?? e
+        this.ring(b.x, b.y, 14, 260, 0.7, '#ff7fd0', 7)
+        this.sparks(b.x, b.y, '#ff9fe0', 30, 480, -Math.PI / 2, Math.PI)
+      } else if (e.type === 'short') {
+        this.ring(e.x, e.y, 12, 160, 0.6, '#ff6b5a', 7)
+        this.sparks(e.x, e.y, '#ff6b5a', 22, 300, -Math.PI / 2, 1.2)
       }
     }
-    if (big && e.type !== 'overdrive-ready' && !relayEvent) this.trauma = Math.min(1, this.trauma + (e.type === 'overdrive-start' ? 0.22 : 0.55))
+    if (big && e.type !== 'overdrive-ready' && !relayEvent) this.trauma = Math.min(1, this.trauma + (e.type === 'overdrive-start' ? 0.22 : e.type === 'target' || e.type === 'overcharge' ? 0.35 : 0.55))
     else if (e.type === 'bumper') this.trauma = Math.min(1, this.trauma + 0.2)
     else if (e.type === 'gold') this.trauma = Math.min(1, this.trauma + 0.12)
     else if (e.type === 'peg') this.trauma = Math.min(1, this.trauma + 0.06)
-    if (big && e.type !== 'overdrive-ready' && !relayEvent && this.drop) this.drop.hitstop = Math.max(this.drop.hitstop, e.type === 'jackpot' ? 0.09 : 0.04)
+    if (big && e.type !== 'overdrive-ready' && !relayEvent && this.drop) this.drop.hitstop = Math.max(this.drop.hitstop, e.type === 'jackpot' ? 0.09 : e.type === 'target' ? 0.08 : 0.04)
     else if (e.type === 'gold' && this.drop) this.drop.hitstop = Math.max(this.drop.hitstop, 0.018)
-    if (e.type === 'jackpot') this.feel('jackpot')
-    else if (e.type === 'hazard' || e.type === 'shatter-ball') this.feel('hurt')
+    if (e.gears && e.gears > 0 && !this.practice) this.coinQueue.push({ ...this.toViewport(e.x, e.y), n: e.gears })
+    if (e.type === 'jackpot' || e.type === 'target') this.feel('jackpot')
+    else if (e.type === 'hazard' || e.type === 'shatter-ball' || e.type === 'short') this.feel('hurt')
     else if (e.type === 'overdrive-start') this.feel('overdrive')
     else if (e.type === 'core' || e.type === 'encounter-clear') this.feel('jackpot')
     else if (e.type === 'bumper' || e.type === 'echo' || e.type === 'seal' || e.type === 'shatter') this.feel('bump')
@@ -1680,6 +1784,19 @@ export class Game {
       this.zoom = 1.08
     } else if (e.type === 'feather') {
       this.say(t('The clock skips'), '', 1, true)
+    } else if (e.type === 'target') {
+      this.danger = false
+      this.zoom = Math.max(this.zoom, 1.06)
+      this.flashAt('gold', 0.3)
+      this.sfx.target()
+    } else if (e.type === 'overcharge') {
+      this.flashAt('gold', 0.2)
+      this.sfx.overcharge(this.drop?.overcharge ?? 1)
+    } else if (e.type === 'short') {
+      this.flashAt('hurt', 0.35)
+      this.sfx.short()
+    } else if (e.type === 'powered') {
+      this.sfx.coins(e.gears ?? 4)
     } else if (e.type === 'launch') this.sfx.launch()
     else if (e.type === 'flip') this.sfx.flip()
     else if (e.type === 'nudge') this.sfx.nudge()
@@ -1743,6 +1860,58 @@ export class Game {
 
   private ring(x: number, y: number, r0: number, r1: number, life: number, color: string, width: number): void {
     this.rings.push({ x, y, r0, r1, life, max: life, color, width })
+  }
+
+  /** Struck pegs recoil away from the sphere and settle back. Drawing only; physics never reads it. */
+  private springPegs(dt: number): void {
+    const drop = this.drop
+    const kick = this.pegKick
+    const seen = this.pegFlashSeen
+    if (!drop || !kick || !seen || this.motionQuery.matches) return
+    for (let i = 0; i < seen.length; i++) {
+      const flash = drop.flashPeg[i]
+      if (flash > seen[i] + 0.25) {
+        const peg = drop.board.pegs[i]
+        const dx = peg.x - drop.ball.x
+        const dy = peg.y - drop.ball.y
+        const d = Math.hypot(dx, dy) || 1
+        const power = Math.min(1, Math.hypot(drop.ball.vx, drop.ball.vy) / 700) * 5 + 1.5
+        kick[i * 4 + 2] += (dx / d) * power * 40
+        kick[i * 4 + 3] += (dy / d) * power * 40
+      }
+      seen[i] = flash
+      const ox = kick[i * 4], oy = kick[i * 4 + 1]
+      let vx = kick[i * 4 + 2], vy = kick[i * 4 + 3]
+      if (!ox && !oy && !vx && !vy) continue
+      // Stiff, lightly damped spring: a quick wobble that settles in a quarter second.
+      vx += (-900 * ox - 22 * vx) * dt
+      vy += (-900 * oy - 22 * vy) * dt
+      let nx = ox + vx * dt, ny = oy + vy * dt
+      if (Math.abs(nx) < 0.02 && Math.abs(ny) < 0.02 && Math.abs(vx) < 0.5 && Math.abs(vy) < 0.5) { nx = 0; ny = 0; vx = 0; vy = 0 }
+      kick[i * 4] = Math.max(-7, Math.min(7, nx)); kick[i * 4 + 1] = Math.max(-7, Math.min(7, ny))
+      kick[i * 4 + 2] = vx; kick[i * 4 + 3] = vy
+    }
+  }
+
+  /** Warns once when a fall is about to land short of its target, while Overdrive could still help. */
+  private watchTarget(): void {
+    const d = this.drop
+    if (this.screen !== 'drop' || !d || !d.target || d.targetMet || this.danger || d.captured || d.dead) return
+    if (d.ball.vy > 0 && d.ball.y > d.board.floorY - 300) {
+      this.danger = true
+      this.sfx.warn()
+      if (d.overdriveReady) this.say(t('Short of target'), this.touchQuery.matches ? t('Tap Overdrive to climb back into the pegs') : t('Press E to climb back into the pegs'), 1.4, false)
+    }
+  }
+
+  /** World position to viewport pixels, for DOM effects that start at a point in the machine. */
+  private toViewport(x: number, y: number): { x: number; y: number } {
+    const cam = this.cam()
+    const k = cam.scale * cam.zoom
+    return {
+      x: this.canvasLeft + cam.cssW / 2 + cam.shakeX + (x - cam.boardW / 2) * k,
+      y: this.canvasTop + cam.cssH / 2 + cam.shakeY + (y - cam.camY) * k,
+    }
   }
 
   /** Slow the fall when the sphere is about to land somewhere that matters. */
@@ -1883,7 +2052,19 @@ export class Game {
       stage: this.stage(),
       toast: this.toast,
       flash: this.flash,
+      intro: this.intro && this.screen === 'aim' ? { key: this.intro.key, kicker: this.intro.kicker, title: this.intro.title, target: this.intro.target, anomaly: this.intro.anomaly, reward: this.intro.reward } : null,
+      coins: this.takeCoins(),
+      status: this.run && !this.practice && ['choices', 'fork', 'shop', 'event', 'bargain', 'repair', 'victory'].includes(this.screen)
+        ? { shell: this.run.integrity, shellMax: this.run.integrityMax, gears: this.run.gears, score: this.run.score }
+        : null,
     }
+  }
+
+  private takeCoins(): { x: number; y: number; n: number }[] {
+    if (!this.coinQueue.length) return []
+    const out = this.coinQueue
+    this.coinQueue = []
+    return out
   }
 
   private signature(): string {
@@ -1944,7 +2125,13 @@ export class Game {
       combo: this.screen === 'drop' ? drop.combo : 0,
       comboT: this.screen === 'drop' && drop.combo > 0 ? clamp(drop.comboTimer / this.run.profile.comboWindow, 0, 1) : 0,
       earned: drop.earned,
-      tally: this.screen === 'drop' && drop.earned > 0,
+      tally: this.screen === 'aim' || this.screen === 'drop' || this.screen === 'resolve',
+      target: drop.target,
+      targetMet: drop.targetMet,
+      overcharge: drop.overcharge,
+      danger: this.danger && !drop.targetMet && this.screen === 'drop',
+      short: drop.short,
+      bossHits: drop.board.boss ? drop.coreHits : null,
       nudges: drop.nudges,
       maxNudges: drop.maxNudges,
       nudgeCooldown: drop.nudgeCd,
@@ -2063,7 +2250,7 @@ export class Game {
           title: this.drafting ? this.draftHeading() : this.offers[0]?.kind === 'relic' ? t('Keep one passenger') : t('Change the sphere'),
           build: this.buildLine(),
           cards: this.choiceCards(false),
-          skip: this.drafting ? t('Trust the bare sphere') : run && run.ascension >= 11 ? t('Skip this reward') : t('Take 15 gears instead'),
+          skip: this.drafting ? t('Trust the bare sphere') : run && run.ascension >= 11 ? t('Skip this reward') : t('Take {n} gears instead', { n: ECON.skipReward }),
         }
       case 'shop':
         return {
@@ -2080,7 +2267,7 @@ export class Game {
         return {
           kind: 'fork',
           title: t(run?.nodes[run.nodeId]?.title ?? 'Choose'),
-          options: (run?.nodes[run.nodeId]?.options ?? []).map((o, index) => ({ ...o, title: t(o.title), detail: t(o.detail), index })),
+          options: (run?.nodes[run.nodeId]?.options ?? []).map((o, index) => ({ ...o, title: t(o.title), detail: t(o.detail), index, ...this.forkPreview(o.next) })),
         }
       case 'repair':
         return {
@@ -2088,15 +2275,15 @@ export class Game {
           text:
             run && run.integrity < run.integrityMax
               ? this.repairAmount() >= 99 ? t('The keeper restores your entire shell before the next act.') : t('Restore up to {n} shell.', { n: this.repairAmount() })
-              : t('The shell is whole. The bench offers 12 gears of scrap instead.'),
+              : t('The shell is whole. The bench offers {n} gears of scrap instead.', { n: ECON.scrap }),
           action: run && run.integrity < run.integrityMax ? this.repairAmount() >= 99 ? t('Restore the whole shell') : t('Mend the shell') : t('Take the scrap'),
         }
       case 'bargain':
-        return { kind: 'bargain', canShell: !!run && run.integrity > 1, canPay: !!run && run.gears >= 30 }
+        return { kind: 'bargain', canShell: !!run && run.integrity > 1, canPay: !!run && run.gears >= ECON.bargainPay, pay: ECON.bargainPay, walk: ECON.bargainWalk }
       case 'resolve': {
         const d = this.drop
-        const tone = !d ? 'good' : d.dead || d.captured === 'hazard' ? 'bad' : d.jackpot || d.wonBoss ? 'gold' : 'good'
-        return { kind: 'resolve', title: t(this.resolveCopy.title), sub: this.resolveCopy.sub, earned: d?.earned ?? 0, tone }
+        const tone = !d ? 'good' : d.dead || d.captured === 'hazard' || d.short ? 'bad' : d.jackpot || d.wonBoss || d.overcharge > 0 ? 'gold' : 'good'
+        return { kind: 'resolve', title: t(this.resolveCopy.title), sub: this.resolveCopy.sub, earned: d?.earned ?? 0, tone, target: d?.target ?? 0, met: !!d?.targetMet, overcharge: d?.overcharge ?? 0, short: !!d?.short, gears: this.practice ? [] : this.fallGears }
       }
       case 'pause':
         return { kind: 'pause', practice: !!this.practice, canSave: !!this.run && !this.practice }
@@ -2460,7 +2647,7 @@ export class Game {
     if (act === 'skip') {
       if (this.screen === 'choices' && this.run) {
         if (this.drafting) { this.drafting = false; this.enterNode('workshop') }
-        else { this.run.gears += this.run.ascension >= 11 ? 0 : 15; this.advance() }
+        else { this.run.gears += this.run.ascension >= 11 ? 0 : ECON.skipReward; this.advance() }
       } else this.skipResolve()
       return
     }

@@ -413,9 +413,11 @@ test('forks, events, shop and victory have readable working decision screens', a
       await expect(page.locator('#app')).toHaveAttribute('data-mode', 'fork')
     }
     if (screen === 'shop') {
+      const price = Number((await action(page, 'buy:1').locator('.price').textContent() ?? '').replace(/\D/g, ''))
+      expect(price).toBeGreaterThan(0)
       await action(page, 'buy:1').click()
       const snapshot = await page.evaluate(() => JSON.parse(localStorage.getItem('plumb-expedition-v2')!))
-      expect(snapshot.run.gears).toBe(250)
+      expect(snapshot.run.gears).toBe(300 - price)
       expect(snapshot.run.upgrades).toContain('shock-absorber')
     }
     if (screen === 'victory') {
@@ -505,7 +507,7 @@ test('guardian objectives credit real contacts, clear naturally and explain thei
     }
     expect(cleared, `${id} is cleared by real physics and legal launch input`).toBe(true)
     await expect(objective).toContainText(`${required} / ${required}`)
-    await expect(objective).toContainText(id === 'gallery' ? '70 gears' : '120 gears')
+    await expect(objective).toContainText(id === 'gallery' ? '25 gears' : '40 gears')
     if (id === 'gallery') expect(returned, 'Bellkeeper preserves progress through its one return').toBe(true)
     await cleanLayout(page)
     await capture(page, info, `${id}-guardian-linked`)

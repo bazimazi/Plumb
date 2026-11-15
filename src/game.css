@@ -648,10 +648,6 @@ kbd {
 .hud-btns .round-btn span { display: contents; }
 .hud-btns .round-btn svg { width: 22px; height: 22px; }
 
-.tally { display: none; flex-direction: row; align-items: baseline; gap: .4rem; padding: .3rem .8rem; border-radius: 999px; background: #0d0930dd; border: 3px solid var(--line); }
-.tally.show { display: flex; animation: rise 240ms var(--out) both; }
-.tally span { font-size: .6rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
-.tally b { font: 400 1.3rem var(--f-display); color: var(--gold); }
 
 .place .kicker { font-size: .66rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--cyan); }
 .place h2 { font: 400 1.5rem/1.05 var(--f-display); margin: .15rem 0 .3rem; paint-order: stroke fill; -webkit-text-stroke: 4px var(--line); }
@@ -767,8 +763,6 @@ kbd {
   .mobile-encounter > strong { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; font-size: .78rem; margin: 0 0 .2rem; }
   .mobile-coach p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: .76rem; }
   #hud[data-encounter="true"] .mobile-coach { display: none !important; }
-  .tally { top: calc(var(--hud-top) + 6px); left: 50%; transform: translateX(-50%); }
-  #hud[data-encounter="true"] .tally, #hud[data-coach="true"] .tally { display: none; }
   .controls { left: 6px; right: 6px; bottom: 8px; }
   .key, .release-sphere, .machine-overview { min-height: 66px; }
   .practice-toolbar { top: calc(var(--hud-top) - 40px); left: 8px; right: 8px; justify-content: center; }
@@ -791,7 +785,6 @@ kbd {
   .hud-info { top: 196px; left: 16px; width: clamp(150px, calc((100vw - 860px) / 2 - 28px), 240px); bottom: 110px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 10px; }
   .hud-mult { top: 76px; right: 16px; width: clamp(150px, calc((100vw - 860px) / 2 - 28px), 240px); align-items: stretch; }
   .hud-btns { top: 16px; right: 16px; }
-  .tally { top: 290px; right: 16px; }
   .controls { left: 50%; transform: translateX(-50%); bottom: 16px; width: min(640px, calc(100% - 32px)); }
   .key .lbl { display: block; font-size: .8rem; }
   .key .touch-label { display: none; }
@@ -833,8 +826,6 @@ kbd {
   .tagline, .finish-row { display: none; }
   .hero-orb-wrap { width: min(34vw, 120px, 17vh); }
 }
-.tally { padding: .15rem .65rem; }
-.tally b { font-size: 1.05rem; }
 @media (min-width: 761px) {
   #toast.live { top: auto; bottom: 118px; }
 }
@@ -850,6 +841,127 @@ kbd {
 @media (min-width: 761px) {
   .screen.star-chart, .screen.help-screen { max-width: 880px; }
 }
+
+/* ================================================================ Target meter */
+/* The score target is the question every fall answers, so its instrument is always on screen. */
+.tally.target-meter {
+  display: none; flex-direction: column; align-items: stretch; gap: 4px; padding: .45rem .7rem .5rem;
+  border-radius: 18px; background: linear-gradient(180deg, #2c2380f5, #1a1458f5); border: 3px solid var(--line);
+  box-shadow: 0 4px 0 var(--line), inset 0 2px 0 #ffffff1c; transition: background 220ms ease, border-color 220ms ease;
+}
+.tally.target-meter.show { display: flex; animation: rise 280ms var(--out) both; }
+.tally.target-meter.no-target .tm-bar, .tally.target-meter.no-target .tm-foot { display: none; }
+.tm-row { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.tm-label { font: 700 .66rem var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.tm-score { font: 400 1.7rem/1 var(--f-display); color: #fff; font-variant-numeric: tabular-nums; paint-order: stroke fill; -webkit-text-stroke: 4px var(--line); }
+.tm-bar { position: relative; height: 14px; border-radius: 10px; background: #0a0726; border: 2px solid var(--line); overflow: hidden; box-shadow: inset 0 2px 4px #0008; }
+.tm-bar i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(0); border-radius: inherit; transition: transform 160ms var(--out); }
+.tm-fill { background: linear-gradient(180deg, #8ff4ff, var(--cyan) 55%, #138fbf); }
+.tm-over { background: repeating-linear-gradient(-45deg, #ff7fd0 0 8px, #ff4fb5 8px 16px); opacity: .95; }
+.tm-mark { position: absolute; top: 0; bottom: 0; right: 0; width: 3px; background: #ffffff55; }
+.tm-foot { display: flex; align-items: center; justify-content: space-between; gap: .4rem; min-height: 1.1rem; }
+.tm-state { font: 700 .72rem var(--f-ui); color: #dcd6ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-tiers { display: inline-flex; gap: 3px; }
+.tm-tiers i { font: 700 .62rem var(--f-ui); font-style: normal; padding: 0 .35rem; border-radius: 999px; background: #0c0830; border: 2px solid var(--line); color: var(--dim); }
+.tm-tiers i.on { background: #ff5fb5; color: #fff; box-shadow: 0 0 12px #ff5fb5aa; }
+.tally.target-meter.met { border-color: #6b4a00; background: linear-gradient(180deg, #5a4210f5, #2c1f0af5); }
+.tally.target-meter.met .tm-fill { background: linear-gradient(180deg, #fff1a8, var(--gold) 55%, #c98500); }
+.tally.target-meter.met .tm-score { color: var(--gold); }
+.tally.target-meter.met .tm-state { color: var(--gold); }
+.tally.target-meter[data-tier="2"] { animation: hot 900ms ease-in-out infinite; }
+.tally.target-meter.burst { animation: meter-burst 700ms var(--pop); }
+@keyframes meter-burst { 0% { transform: scale(1); } 30% { transform: scale(1.14); box-shadow: 0 4px 0 var(--line), 0 0 60px #ffc93ccc; } 100% { transform: scale(1); } }
+.tally.target-meter.danger { border-color: #7a1020; animation: meter-danger 600ms ease-in-out infinite; }
+.tally.target-meter.danger .tm-state { color: #ff8d98; }
+.tally.target-meter.danger .tm-fill { background: linear-gradient(180deg, #ffb0b8, var(--red)); }
+@keyframes meter-danger { 50% { box-shadow: 0 4px 0 var(--line), 0 0 28px #ff4d5ecc; background: linear-gradient(180deg, #5a1020f5, #2a0814f5); } }
+.tally.target-meter.short { border-color: #7a1020; }
+.tally.target-meter.short .tm-state { color: #ff8d98; }
+#hud .tally.target-meter.danger ~ .controls .overdrive-key.ready { animation: drive-ready 420ms ease-in-out infinite; }
+
+@media (min-width: 761px) {
+  .tally.target-meter { top: 76px; right: 16px; width: clamp(150px, calc((100vw - 860px) / 2 - 28px), 240px); }
+  .hud-mult { top: 192px; }
+}
+@media (min-width: 761px) and (max-width: 1180px) {
+  .tally.target-meter { width: 150px; }
+  .tm-score { font-size: 1.35rem; }
+}
+@media (max-width: 760px) {
+  :root { --hud-top: 136px; }
+  #app[data-coach="true"] { --hud-top: 186px; }
+  #app[data-encounter="true"] { --hud-top: 192px; }
+  #app[data-practice="true"] { --hud-top: 174px; }
+  #app[data-practice="true"][data-encounter="true"] { --hud-top: 226px; }
+  html.lg { --hud-top: 148px; }
+  html.lg #app[data-coach="true"] { --hud-top: 206px; }
+  html.lg #app[data-encounter="true"] { --hud-top: 214px; }
+  html.lg #app[data-practice="true"] { --hud-top: 190px; }
+  html.lg #app[data-practice="true"][data-encounter="true"] { --hud-top: 250px; }
+  /* Row one: resources and buttons. Row two: the target meter. Then the machine title and guidance. */
+  .mobile-place { top: calc(62px + 2.2rem); }
+  .tally.target-meter { top: 58px; left: 8px; right: 8px; transform: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto; align-items: center; gap: 2px 8px; padding: .25rem .55rem; border-radius: 14px; }
+  #hud[data-encounter="true"] .tally.target-meter, #hud[data-coach="true"] .tally.target-meter { display: grid; }
+  .tally.target-meter:not(.show) { display: none !important; }
+  .tally.target-meter.show { display: grid; animation: none; }
+  .tally.target-meter .tm-row { display: contents; }
+  .tally.target-meter .tm-label { grid-column: 1; grid-row: 1; font-size: .6rem; }
+  .tally.target-meter .tm-score { grid-column: 3; grid-row: 1; font-size: 1.2rem; -webkit-text-stroke-width: 3px; }
+  .tally.target-meter .tm-bar { grid-column: 2; grid-row: 1; height: 12px; }
+  .tally.target-meter .tm-foot { display: none; }
+  .tally.target-meter.no-target { grid-template-columns: 1fr auto; }
+  .tally.target-meter.no-target .tm-score { grid-column: 2; }
+  .practice-toolbar { top: calc(var(--hud-top) - 40px); }
+}
+
+/* ================================================================ Machine intro */
+.machine-intro {
+  position: absolute; left: 50%; top: calc(26% + var(--safe-t)); z-index: 5; transform: translateX(-50%); pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: .25rem; min-width: min(360px, calc(100% - 32px)); max-width: calc(100% - 32px);
+  padding: .9rem 1.6rem 1rem; border-radius: 26px; text-align: center;
+  background: radial-gradient(ellipse at 50% 0%, #4a3bc0f2, #1d1660f2 70%); border: 3px solid var(--line);
+  box-shadow: 0 8px 0 var(--line), 0 20px 60px #000a, inset 0 2px 0 #ffffff26;
+}
+.machine-intro.in { animation: intro-in 520ms var(--pop) both; }
+.machine-intro.out { animation: intro-out 260ms ease-in both; }
+@keyframes intro-in { from { opacity: 0; transform: translateX(-50%) translateY(-30px) scale(.8) rotate(-2deg); } }
+@keyframes intro-out { to { opacity: 0; transform: translateX(-50%) translateY(-16px) scale(.92); } }
+.machine-intro small { font: 700 .72rem var(--f-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); }
+.machine-intro h2 { font: 400 clamp(1.9rem, 7vw, 2.6rem)/1.05 var(--f-display); paint-order: stroke fill; -webkit-text-stroke: 6px var(--line); text-shadow: 0 4px 0 var(--line); }
+.mi-target { display: inline-flex; align-items: baseline; gap: .5rem; margin-top: .35rem; padding: .25rem .9rem; border-radius: 999px; background: #0c0830cc; border: 2px solid var(--line); }
+.mi-target span { font: 700 .7rem var(--f-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.mi-target b { font: 400 1.6rem/1 var(--f-display); color: var(--gold); }
+.mi-rule { font-size: .8rem; color: #d8d2ff; max-width: 22rem; }
+.mi-anomaly { display: inline-flex; align-items: center; gap: .3rem; font: 700 .78rem var(--f-ui); color: var(--pink); }
+.mi-anomaly .ico { width: 1rem; height: 1rem; }
+
+/* ================================================================ Coins */
+.coin-fly { position: absolute; left: 0; top: 0; z-index: 6; width: 22px; height: 22px; margin: -11px 0 0 -11px; pointer-events: none; color: var(--gold); filter: drop-shadow(0 2px 0 var(--line)) drop-shadow(0 0 6px #ffc93caa); will-change: transform; }
+.coin-fly .ico { width: 100%; height: 100%; }
+
+/* ================================================================ Resolve card */
+.resolve-card {
+  position: relative; display: flex; flex-direction: column; align-items: stretch; gap: .5rem; width: min(360px, 100%); margin-top: .4rem;
+  padding: .8rem 1rem; border-radius: 22px; background: linear-gradient(180deg, #2c2380f2, #1a1458f2); border: 3px solid var(--line);
+  box-shadow: 0 6px 0 var(--line), inset 0 2px 0 #ffffff1c; animation: rise 420ms var(--out) 160ms both; text-align: start;
+}
+.rc-score { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.rc-score small { font: 700 .72rem var(--f-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.resolve .rc-score .earned { font-size: clamp(2.1rem, 9vw, 2.8rem); animation: slam 560ms var(--pop) 220ms both; }
+.rc-target { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .35rem .6rem; border-radius: 12px; background: #0c083099; font-weight: 700; font-size: .85rem; }
+.rc-target em { display: inline-flex; align-items: center; gap: .3rem; font-style: normal; }
+.rc-target em .ico { width: 1rem; height: 1rem; }
+.rc-target.met { background: #ffc93c26; color: var(--gold); }
+.rc-target.miss { background: #ff4d5e26; color: #ff9aa4; }
+.rc-gears { display: flex; flex-direction: column; gap: 3px; }
+.rc-line { display: flex; align-items: center; justify-content: space-between; gap: .5rem; font-size: .82rem; color: #dcd6ff; animation: rise 320ms var(--out) both; animation-delay: calc(420ms + var(--i) * 110ms); }
+.rc-line b { display: inline-flex; align-items: center; gap: .2rem; font: 400 1rem var(--f-display); color: var(--gold); }
+.rc-line b .ico { width: .95rem; height: .95rem; }
+.rc-total { margin-top: 2px; padding-top: 4px; border-top: 2px dashed #ffffff22; font-weight: 700; color: #fff; }
+.rc-total b { font-size: 1.25rem; }
+:root[dir="rtl"] .tm-bar i { transform-origin: right; }
+:root[dir="rtl"] .tm-mark { right: auto; left: 0; }
+:root[dir="rtl"] .tm-score, :root[dir="rtl"] .mi-target b, :root[dir="rtl"] .rc-line b, :root[dir="rtl"] .tm-tiers i { direction: ltr; unicode-bidi: isolate; }
 
 /* ------------------------------------------------------- right-to-left */
 /* Persian and other RTL languages. Text flows right to left; the machine itself does not mirror. */
@@ -886,3 +998,76 @@ kbd {
 :root[dir="rtl"] .seed input { text-align: left; }
 :root[dir="rtl"] .controls .ico-dir, :root[dir="rtl"] .sphere-stage .ico-dir, :root[dir="rtl"] .trial-select .ico-dir { transform: none; }
 :root[dir="rtl"] .logo { direction: ltr; }
+
+/* ---- Hub composition: one column on phones, a showcase and a play desk on wide screens. */
+.home-main, .home-showcase, .home-side { display: contents; }
+#stage.enter .home-showcase > *, #stage.enter .home-side > * { animation: rise 460ms var(--out) backwards; }
+#stage.enter .home-showcase > :nth-child(2) { animation-delay: 60ms; }
+#stage.enter .home-side > :nth-child(1) { animation-delay: 100ms; }
+#stage.enter .home-side > :nth-child(2) { animation-delay: 150ms; }
+#stage.enter .home-side > :nth-child(n + 3) { animation-delay: 200ms; }
+@media (min-width: 980px) and (min-height: 560px) {
+  .home { max-width: 1080px; padding: 18px 28px 0; }
+  .home-main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: center; gap: 48px; min-height: 0; }
+  .home-showcase { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .home-side { display: flex; flex-direction: column; gap: 14px; }
+  .home-showcase .hero-orb-wrap { width: min(250px, 30vh); }
+  .home-showcase .logo { font-size: clamp(4rem, 7vw, 5.6rem); }
+  .home-side .play-btn { min-height: 92px; }
+  .home-side .play-btn b { font-size: 2.6rem; }
+  .home-side .home-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .home-side .tile { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 12px 14px; text-align: start; }
+  .home-side .tile b { font-size: 1rem; }
+  .home-side .tile small { font-size: .74rem; }
+  .home-side .tile > span, .home-side .tile > b + small { display: block; }
+  .home-nav { margin-left: -28px; margin-right: -28px; border-radius: 22px 22px 0 0; }
+  .sphere-name p, .unlock-hint, .finish-hint { display: revert; }
+}
+
+/* ---- Run end: actions sit right under the headline numbers. */
+.end-actions { display: flex; flex-direction: column; gap: .2rem; margin: .4rem 0 .8rem; }
+.end-actions .btn.big { margin-top: 0; }
+
+/* ---- Decision status: shell and wallet stay readable above every choice. */
+.decision-status {
+  position: absolute; top: calc(12px + var(--safe-t)); left: 50%; z-index: 5; transform: translateX(-50%); pointer-events: none;
+  display: flex; align-items: center; gap: .9rem; padding: .35rem .9rem; border-radius: 999px;
+  background: #120d3ee8; border: 3px solid var(--line); box-shadow: 0 4px 0 var(--line), inset 0 2px 0 #ffffff14; animation: rise 300ms var(--out) both;
+}
+.decision-status > span { display: inline-flex; align-items: center; gap: .3rem; }
+.decision-status em { font: 600 .75rem var(--f-ui); font-style: normal; color: var(--muted); }
+.decision-status b { font: 400 1.15rem/1 var(--f-display); }
+.decision-status .ds-gears { color: var(--gold); }
+.decision-status .ds-gears .ico, .decision-status .ds-score .ico { width: 1.1rem; height: 1.1rem; }
+.decision-status .ds-score { color: #d9d3ff; }
+#app:not([data-mode="choices"]):not([data-mode="fork"]):not([data-mode="shop"]):not([data-mode="event"]):not([data-mode="bargain"]):not([data-mode="repair"]):not([data-mode="victory"]) .decision-status { display: none; }
+#stage .decision { padding-top: 72px; }
+@media (max-width: 760px) {
+  .decision-status { left: 12px; transform: none; gap: .6rem; padding: .3rem .7rem; }
+  #stage .decision { padding-top: 66px; }
+}
+:root[dir="rtl"] .decision-status b, :root[dir="rtl"] .decision-status em { direction: ltr; unicode-bidi: isolate; }
+@media (max-width: 760px) { :root[dir="rtl"] .decision-status { left: auto; right: 12px; } }
+
+/* Overdrive keeps its warm active glow while the surge runs, even though it cannot be pressed again. */
+.overdrive-key.active:disabled { filter: none; }
+
+/* Numbers that bump scale from their own start edge, so a big combo never jumps outside its chip. */
+.chip > b { align-self: flex-start; transform-origin: 0 50%; }
+:root[dir="rtl"] .chip > b { transform-origin: 100% 50%; }
+/* Live notices sit above the sphere's path, never over the collectors it is falling toward. */
+#toast.live { top: calc(10px + var(--safe-t)); bottom: auto; }
+@media (min-width: 761px) { #toast.live { top: calc(18px + var(--safe-t)); bottom: auto; } }
+@media (max-width: 760px) { #toast.live { top: calc(var(--hud-top) + 8px + var(--safe-t)); bottom: auto; } }
+
+.tally.target-meter.boss .tm-tiers { display: none; }
+.tally.target-meter.boss .tm-fill { background: linear-gradient(180deg, #f2ffb0, #c8f25a 55%, #6f9a1a); }
+.tally.target-meter.boss .tm-score { color: #e6f27a; }
+
+/* Forks show what each path asks for and what it pays. */
+.fork-target { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .65rem; border-radius: 999px; background: #0008; border: 2px solid var(--line); font: 400 1rem var(--f-display); color: var(--gold); }
+.fork-target .ico { width: .95rem; height: .95rem; }
+.fork-reward { font: 700 .74rem var(--f-ui); color: #fff; opacity: .9; }
+.mi-reward { display: inline-flex; align-items: center; gap: .3rem; font: 700 .78rem var(--f-ui); color: #cfe9ff; }
+.mi-reward .ico { width: .95rem; height: .95rem; color: var(--gold); }
+:root[dir="rtl"] .fork-target { direction: rtl; }
