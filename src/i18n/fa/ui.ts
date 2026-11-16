@@ -151,6 +151,8 @@ export const ui: Dictionary = {
   'Vibration': 'لرزش گوشی',
   'Vibration (supported phones)': 'لرزش (گوشی‌های پشتیبانی‌شده)',
   'Sound': 'صدا',
+  'Music': 'موسیقی',
+  'Machine {n} of {total}': 'ماشین {n} از {total}',
   'Graphics': 'گرافیک',
   'Auto': 'خودکار',
   'Sharp': 'شفاف',

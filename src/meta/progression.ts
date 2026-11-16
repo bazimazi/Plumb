@@ -303,7 +303,7 @@ export function advanceQuests(book: QuestBook, defs: QuestDef[], delta: Partial<
 // ---------------------------------------------------------------------------
 // Feats: tiered lifetime milestones that never run out.
 
-export type FeatStat = 'pegs' | 'golds' | 'machines' | 'wins' | 'jackpots' | 'overdrives' | 'combo' | 'depth' | 'score' | 'runs' | 'guardians'
+export type FeatStat = 'pegs' | 'golds' | 'machines' | 'wins' | 'jackpots' | 'overdrives' | 'combo' | 'depth' | 'score' | 'runs' | 'guardians' | 'blasts'
 
 export interface FeatDef { id: FeatStat; name: string; text: (target: number) => string; target: (tier: number) => number }
 
@@ -321,6 +321,7 @@ export const FEATS: FeatDef[] = [
   { id: 'wins', name: 'Grinder Breaker', text: n => t('Break the Grinder {n} times', { n: n.toLocaleString('en-US') }), target: geometric(1, 2.5) },
   { id: 'jackpots', name: 'Maw Feeder', text: n => t('Land {n} jackpots', { n: n.toLocaleString('en-US') }), target: geometric(1, 2.5) },
   { id: 'overdrives', name: 'Reactor Pilot', text: n => t('Trigger Overdrive {n} times', { n: n.toLocaleString('en-US') }), target: geometric(10, 2.5) },
+  { id: 'blasts', name: 'Demolition', text: n => t('Detonate {n} blast pegs', { n: n.toLocaleString('en-US') }), target: geometric(10, 2.5) },
   { id: 'guardians', name: 'Guardian Friend', text: n => t('Link {n} guardians', { n: n.toLocaleString('en-US') }), target: geometric(1, 2.5) },
   { id: 'combo', name: 'Chain Singer', text: n => t('Reach a {n}-hit combo', { n }), target: tier => 10 + tier * 5 },
   { id: 'score', name: 'Fortune', text: n => t('Score {n} in one expedition', { n: n.toLocaleString('en-US') }), target: geometric(1500, 2.2) },

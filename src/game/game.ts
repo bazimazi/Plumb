@@ -1,4 +1,5 @@
 import { Sfx } from '../audio/sfx'
+import { Music, type MusicState } from '../audio/music'
 import { BALLS, BALL_LIST, CHALLENGES, LORE, PARTS, RELICS, TRAILS, UPGRADES, ballById } from '../content/catalog'
 import { clamp, formatMult } from '../core/math'
 import { cleanSeed, makeSeed, rngFor } from '../core/rng'
@@ -15,6 +16,7 @@ import { describeDrop, type DropReport } from '../sim/report'
 import { createBoard, demoBoard } from '../sim/generate'
 import { ANOMALIES, applyAnomaly } from '../sim/anomaly'
 import { applyEncounter } from '../sim/encounter'
+import { blastCount, placeBlasts } from '../sim/blast'
 import { computeProfile, type Profile } from '../sim/profile'
 import { ECON, RESEARCH_ORDER, STARTER_RELICS, TUNING } from '../tuning'
 import { createRoute, type GameNode } from './route'
@@ -126,6 +128,8 @@ export class Game {
   private fallGears: { label: string; n: number }[] = []
   /** The fall is heading home short of its target; warned once per fall. */
   private danger = false
+  /** The first blast of a session explains itself once, for new players. */
+  private blastTip = false
   /** Machine title card shown as a new machine slides in. */
   private intro: { key: number; kicker: string; title: string; target: number; anomaly: string; reward: string; t: number } | null = null
   private introKey = 0
@@ -198,6 +202,7 @@ export class Game {
   private readonly input: Input
   private readonly ui: UI
   private readonly sfx: Sfx
+  private readonly music: Music
   private readonly debugEl: HTMLElement
   private readonly motionQuery = matchMedia('(prefers-reduced-motion: reduce)')
   /** Touch screens get copy about buttons and drags instead of keyboard keys. */
@@ -223,7 +228,9 @@ export class Game {
     if (!this.save.balls.includes(this.save.ball)) this.save.ball = 'rubber'
     this.sfx = new Sfx()
     this.sfx.volume = this.save.settings.volume
-    this.canvas = document.getElementById('view') as HTMLCanvasElement
+    this.music = new Music(this.sfx)
+    this.music.volume = this.save.settings.music
+    this.canvas =document.getElementById('view') as HTMLCanvasElement
     const ctx = this.canvas.getContext('2d')
     if (!ctx) throw new Error('canvas unavailable')
     this.ctx = ctx
@@ -245,8 +252,8 @@ export class Game {
     this.debugEl = document.getElementById('debug')!
     const params = new URLSearchParams(location.search)
     if (params.get('seed')) this.draftSeed = cleanSeed(params.get('seed') || '')
-    if ((params.get('rules') === '2' || params.get('rules') === '3') && this.draftSeed) {
-      this.sharedRules = params.get('rules') === '2' ? 2 : 3
+    if (['2', '3', '4'].includes(params.get('rules') ?? '') && this.draftSeed) {
+      this.sharedRules = Number(params.get('rules')) as RulesVersion
       this.sharedBall = BALLS[params.get('sphere') || '']?.id || ''
       this.draftAscension = Math.floor(clamp(Number(params.get('trial')) || 0, 0, MAX_TRIAL))
       this.sharedCatalogue = (params.get('archive') || '').split(',').filter(id => RELICS[id])
@@ -349,6 +356,7 @@ export class Game {
       steps++
     }
     this.animate(dt)
+    this.music.update(this.musicState(), dt)
     this.draw(t)
     this.ui.render(this.view())
     this.syncBackGuard()
@@ -581,6 +589,23 @@ export class Game {
       hitboxes: this.hitboxes,
       showcase: demo ? this.showcaseBall() : null,
     })
+  }
+
+  /** What the score should be doing right now. Presentation only. */
+  private musicState(): MusicState {
+    const s = this.screen
+    const drop = this.drop
+    const boss = !!drop?.board.boss && !this.attract()
+    let mood: MusicState['mood'] = 'calm'
+    if (this.attract() || this.menu() || s === 'reveal') mood = 'menu'
+    else if (s === 'pause') mood = 'off'
+    else if (s === 'aim') mood = boss ? 'boss' : 'aim'
+    else if (s === 'drop' || s === 'resolve') mood = boss ? 'boss' : 'drop'
+    else if (s === 'victory' || (s === 'runend' && /falls/i.test(source(this.summary?.heading ?? '')))) mood = 'triumph'
+    let intensity = 0
+    if (s === 'drop' && drop) intensity = clamp(drop.combo / 18, 0, 1) * 0.6 + clamp((drop.mult - 1) / 3, 0, 1) * 0.4 + (drop.overdriveTime > 0 ? 0.3 : 0) + (drop.overcharge >= 2 ? 0.5 : 0)
+    else if (s === 'resolve' && drop?.targetMet) intensity = 0.5
+    return { mood, intensity: clamp(intensity, 0, 1), overdrive: s === 'drop' && !!drop && drop.overdriveTime > 0, danger: s === 'drop' && this.danger && !!drop && !drop.targetMet }
   }
 
   private menu(): boolean {
@@ -875,9 +900,11 @@ export class Game {
     board.payout *= 1 + run.ascension * 0.1 + Math.min(10, run.loop) * 0.18
     if (run.ascension >= 13) board.payout *= 0.85
     // The target follows trial and circuit pressure, never the Star Chart, so permanent yield helps.
-    board.target = machineTarget({ layout: node.layout, depth: node.depth, ascension: run.ascension, loop: run.loop, payout: board.payout, boss: node.kind === 'boss' })
+    board.target = machineTarget({ layout: node.layout, depth: node.depth, ascension: run.ascension, loop: run.loop, payout: board.payout, boss: node.kind === 'boss', ballId: run.ballId })
     board.payout *= 1 + this.bonuses().yield
     if (node.encounter) applyEncounter(board, node.encounter)
+    // After guardians reshape the field. Rules 4: blast pegs, from their own stream so earlier rules rebuild the same machines.
+    if (run.rules >= 4 && node.kind !== 'boss') placeBlasts(board, rngFor(run.seed, `blast:${run.loop}:${node.id}:${run.boardNonce}`), blastCount(node.sector, run.loop))
     return board
   }
 
@@ -1332,6 +1359,7 @@ export class Game {
     run.overdrives = (run.overdrives ?? 0) + drop.overdriveUses
     if (drop.encounterComplete) run.guardians = (run.guardians ?? 0) + 1
     this.save.lifetime.overdrives += drop.overdriveUses
+    this.save.lifetime.blasts += drop.blasts
     if (drop.encounterComplete) this.save.lifetime.guardians += 1
     if (survived && node?.kind !== 'boss') this.save.lifetime.machines += 1
     if (drop.wonBoss) { this.save.lifetime.wins += 1; this.save.lifetime.machines += 1 }
@@ -1378,7 +1406,7 @@ export class Game {
     const values: Record<string, number> = {
       pegs: this.save.lifetime.pegs, golds: this.save.lifetime.golds, machines: this.save.lifetime.machines,
       runs: this.save.runs, wins: this.save.lifetime.wins, jackpots: this.save.lifetime.jackpots,
-      overdrives: this.save.lifetime.overdrives, guardians: this.save.lifetime.guardians,
+      overdrives: this.save.lifetime.overdrives, guardians: this.save.lifetime.guardians, blasts: this.save.lifetime.blasts,
       combo: this.save.bestCombo, score: this.save.bestScore,
       depth: Math.max(0, ...Object.values(this.save.deepest)),
     }
@@ -1589,7 +1617,7 @@ export class Game {
     try {
       if (!data || data.version !== 2 || !data.run || !CHECKPOINT_SCREENS.includes(data.screen)) throw new Error('checkpoint')
       const r = data.run
-      if (r.rules !== undefined && r.rules !== 2 && r.rules !== 3) throw new Error('rules')
+      if (r.rules !== undefined && r.rules !== 2 && r.rules !== 3 && r.rules !== 4) throw new Error('rules')
       const rules: RulesVersion = r.rules ?? 2
       if (!BALLS[r.ballId] || !r.seed || cleanSeed(r.seed) !== r.seed || !['expedition', 'daily'].includes(r.mode)) throw new Error('identity')
       for (const key of ['gears', 'score', 'integrity', 'integrityMax', 'drops', 'bestCombo', 'bestMult', 'shatters', 'portals', 'jackpots', 'boardNonce', 'ascension', 'loop', 'clears', 'cleanDrops', 'golds', 'pegs'] as const) if (!Number.isFinite(r[key]) || r[key] < 0) throw new Error('counters')
@@ -1665,7 +1693,7 @@ export class Game {
     if (e.type === 'overdrive-start') this.floaters = this.floaters.filter(f => (f.size ?? 18) <= 22)
     if (e.text && !e.type.startsWith('overdrive') && !relayEvent && !arc && (e.points || big || e.type === 'refund' || e.type === 'special')) {
       const size = e.type === 'jackpot' || e.type === 'target' ? 40 : e.type === 'overcharge' ? 32 : big ? 28 : e.type === 'gold' ? 22 : e.points && e.points >= 40 ? 23 : e.points && e.points >= 15 ? 20 : 17
-      const color = e.type === 'target' ? '#ffd56a' : e.type === 'overcharge' ? '#ff9fe0' : e.type === 'short' ? '#ff6b5a'
+      const color = e.type === 'target' ? '#ffd56a' : e.type === 'overcharge' ? '#ff9fe0' : e.type === 'short' ? '#ff6b5a' : e.type === 'blast' || e.type === 'blast-pay' ? '#ffae5c'
         : e.type === 'peg' && (e.combo ?? 0) >= 15 ? '#ff9fe0' : e.type === 'peg' && (e.combo ?? 0) >= 8 ? '#9ff5ff' : pal
       this.addFeedback(e.type === 'target' || e.type === 'overcharge' ? (this.drop?.ball ?? e) : e, e.text, color, size, big || e.type === 'refund' || e.type === 'special')
     }
@@ -1694,6 +1722,12 @@ export class Game {
       } else if (e.type === 'bumper' || e.type === 'echo' || e.type === 'seal') {
         this.ring(e.x, e.y, 28, 96, 0.4, '#e0b07a', 6)
         this.sparks(e.x, e.y, '#ffe2b8', 14, 300)
+      } else if (e.type === 'blast' && e.text) {
+        this.ring(e.x, e.y, 12, this.drop?.profile.blastReach ?? 125, 0.5, '#ffae5c', 10)
+        this.ring(e.x, e.y, 6, (this.drop?.profile.blastReach ?? 125) * 0.6, 0.35, '#fff3d6', 4)
+        this.sparks(e.x, e.y, '#ffae5c', 34, 520)
+        this.sparks(e.x, e.y, '#ffe08a', 16, 300, -Math.PI / 2, 1.3)
+        this.burst(e.x, e.y, '#5a2a14', 14, 160)
       } else if (e.type === 'shatter') {
         this.sparks(e.x, e.y, '#ffffff', 18, 320)
         this.burst(e.x, e.y, '#f4efe4', 10, 120)
@@ -1745,7 +1779,7 @@ export class Game {
     else if (e.type === 'hazard' || e.type === 'shatter-ball' || e.type === 'short') this.feel('hurt')
     else if (e.type === 'overdrive-start') this.feel('overdrive')
     else if (e.type === 'core' || e.type === 'encounter-clear') this.feel('jackpot')
-    else if (e.type === 'bumper' || e.type === 'echo' || e.type === 'seal' || e.type === 'shatter') this.feel('bump')
+    else if (e.type === 'bumper' || e.type === 'echo' || e.type === 'seal' || e.type === 'shatter' || e.type === 'blast') this.feel('bump')
     else if (e.type === 'gold' || e.type === 'crit') this.feel('gold')
     else if (e.type === 'flip') this.feel('flip')
     else if (e.type === 'peg' || e.type === 'spring') this.feel('tick')
@@ -1808,6 +1842,13 @@ export class Game {
     else if (e.type === 'peg' || e.type === 'spring') this.sfx.peg(e.combo ?? 1)
     else if (e.type === 'bumper' || e.type === 'echo' || e.type === 'seal') this.sfx.bumper()
     else if (e.type === 'shatter') this.sfx.shatter()
+    else if (e.type === 'blast' && e.text) {
+      this.sfx.blast(this.drop?.blasts ?? 1)
+      this.flashAt('blast', 0.22)
+      if (this.drop) this.drop.hitstop = Math.max(this.drop.hitstop, 0.07)
+      this.trauma = Math.min(1, this.trauma + 0.2)
+      if (!this.blastTip && !this.practice && this.save.runs < 3) { this.blastTip = true; this.say(t('Blast peg'), t('Every peg within reach pays. Aim for the next one.'), 1.8, false) }
+    }
     else if (e.type === 'pocket') this.sfx.pocket(!!e.gears)
     else if (e.type === 'portal' || e.type === 'crit') this.sfx.gold(6)
   }
@@ -1884,15 +1925,20 @@ export class Game {
         kick[i * 4 + 3] += (dy / d) * power * 40
       }
       seen[i] = flash
-      const ox = kick[i * 4], oy = kick[i * 4 + 1]
+      let nx = kick[i * 4], ny = kick[i * 4 + 1]
       let vx = kick[i * 4 + 2], vy = kick[i * 4 + 3]
-      if (!ox && !oy && !vx && !vy) continue
-      // Stiff, lightly damped spring: a quick wobble that settles in a quarter second.
-      vx += (-900 * ox - 22 * vx) * dt
-      vy += (-900 * oy - 22 * vy) * dt
-      let nx = ox + vx * dt, ny = oy + vy * dt
+      if (!nx && !ny && !vx && !vy) continue
+      // Stiff, lightly damped spring: a quick wobble that settles in a quarter second. Fixed substeps
+      // keep it stable on slow frames, where one large explicit step would ring forever.
+      for (let left = dt; left > 1e-6; left -= 1 / 120) {
+        const h = Math.min(1 / 120, left)
+        vx += (-900 * nx - 22 * vx) * h
+        vy += (-900 * ny - 22 * vy) * h
+        nx = Math.max(-7, Math.min(7, nx + vx * h))
+        ny = Math.max(-7, Math.min(7, ny + vy * h))
+      }
       if (Math.abs(nx) < 0.02 && Math.abs(ny) < 0.02 && Math.abs(vx) < 0.5 && Math.abs(vy) < 0.5) { nx = 0; ny = 0; vx = 0; vy = 0 }
-      kick[i * 4] = Math.max(-7, Math.min(7, nx)); kick[i * 4 + 1] = Math.max(-7, Math.min(7, ny))
+      kick[i * 4] = nx; kick[i * 4 + 1] = ny
       kick[i * 4 + 2] = vx; kick[i * 4 + 3] = vy
     }
   }
@@ -2059,9 +2105,16 @@ export class Game {
       intro: this.intro && this.screen === 'aim' ? { key: this.intro.key, kicker: this.intro.kicker, title: this.intro.title, target: this.intro.target, anomaly: this.intro.anomaly, reward: this.intro.reward } : null,
       coins: this.takeCoins(),
       status: this.run && !this.practice && ['choices', 'fork', 'shop', 'event', 'bargain', 'repair', 'victory'].includes(this.screen)
-        ? { shell: this.run.integrity, shellMax: this.run.integrityMax, gears: this.run.gears, score: this.run.score }
+        ? { shell: this.run.integrity, shellMax: this.run.integrityMax, gears: this.run.gears, score: this.run.score, route: this.routeRail() }
         : null,
     }
+  }
+
+  private routeRail(): { depth: number; total: number; circuit: number } | null {
+    const run = this.run
+    if (!run || this.practice) return null
+    const total = Object.values(run.nodes).find(n => n.kind === 'boss')?.depth ?? 10
+    return { depth: run.nodes[run.nodeId]?.depth ?? 1, total, circuit: run.loop + 1 }
   }
 
   private takeCoins(): { x: number; y: number; n: number }[] {
@@ -2158,6 +2211,7 @@ export class Game {
       muted: this.sfx.isMuted,
       aiming: this.screen === 'aim',
       playing: this.screen === 'aim' || this.screen === 'drop',
+      route: this.routeRail(),
       journey: this.practice ? t('Practice · attempt {n} · Trial {trial}', { n: this.practice.attempt, trial: this.run.ascension }) : t('Circuit {circuit} · machine {machine} · Trial {trial}', { circuit: this.run.loop + 1, machine: this.run.nodes[this.run.nodeId]?.depth ?? 1, trial: this.run.ascension }),
       objective: this.objectiveLine(),
       anomaly: this.nodeAnomaly(this.run.nodes[this.run.nodeId]) ? t(ANOMALIES[this.nodeAnomaly(this.run.nodes[this.run.nodeId])!].name) : '',
@@ -2252,6 +2306,7 @@ export class Game {
           flash: this.save.settings.flash,
           large: this.save.settings.large,
           volume: this.save.settings.volume,
+          music: this.save.settings.music,
           speed: this.save.settings.speed,
           lang: locale(),
           langs: LOCALES.map(l => ({ id: l.id, name: l.name })),
@@ -2353,7 +2408,7 @@ export class Game {
     const values: Record<string, number> = {
       pegs: this.save.lifetime.pegs, golds: this.save.lifetime.golds, machines: this.save.lifetime.machines,
       runs: this.save.runs, wins: this.save.lifetime.wins, jackpots: this.save.lifetime.jackpots,
-      overdrives: this.save.lifetime.overdrives, guardians: this.save.lifetime.guardians,
+      overdrives: this.save.lifetime.overdrives, guardians: this.save.lifetime.guardians, blasts: this.save.lifetime.blasts,
       combo: this.save.bestCombo, score: this.save.bestScore, depth: Math.max(0, ...Object.values(this.save.deepest)),
     }
     const now = new Date()
@@ -2743,6 +2798,15 @@ export class Game {
     }
     if (act === 'mute') {
       this.sfx.toggle()
+      return
+    }
+    if (act.startsWith('music:')) {
+      const v = Number(act.slice(6))
+      if (Number.isFinite(v)) {
+        this.save.settings.music = clamp(v, 0, 1)
+        this.music.volume = this.save.settings.music
+        writeSave(this.save)
+      }
       return
     }
     if (act.startsWith('volume:')) {

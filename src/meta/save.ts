@@ -8,6 +8,8 @@ export interface Settings {
   flash: boolean
   large: boolean
   volume: number
+  /** Generative score volume, separate from effects. */
+  music: number
   speed: 0.75 | 1 | 1.5 | 2
   haptics: boolean
   /** auto adapts resolution to the device; saver caps resolution and menu frame rate. */
@@ -16,7 +18,7 @@ export interface Settings {
 
 export interface Lifetime {
   pegs: number; golds: number; shatters: number; jackpots: number; portals: number
-  machines: number; wins: number; overdrives: number; guardians: number
+  machines: number; wins: number; overdrives: number; guardians: number; blasts: number
 }
 
 export interface SaveData {
@@ -81,7 +83,7 @@ function fresh(): SaveData {
     trails: [],
     trail: '',
     lore: [],
-    lifetime: { pegs: 0, golds: 0, shatters: 0, jackpots: 0, portals: 0, machines: 0, wins: 0, overdrives: 0, guardians: 0 },
+    lifetime: { pegs: 0, golds: 0, shatters: 0, jackpots: 0, portals: 0, machines: 0, wins: 0, overdrives: 0, guardians: 0, blasts: 0 },
     coachingComplete: false,
     stardust: 0,
     level: 1,
@@ -101,6 +103,7 @@ function fresh(): SaveData {
       flash: !reduce,
       large: false,
       volume: 0.7,
+      music: 0.5,
       speed: 1,
       haptics: true,
       quality: 'auto',
@@ -120,6 +123,7 @@ export function loadSave(): SaveData {
     const settings = { ...base.settings, ...parsed.settings }
     for (const key of ['shake', 'particles', 'flash', 'large', 'haptics'] as const) settings[key] = typeof settings[key] === 'boolean' ? settings[key] : base.settings[key]
     settings.volume = Math.min(1, number(settings.volume, 0.7))
+    settings.music = Math.min(1, number(settings.music, 0.5))
     settings.speed = [0.75, 1, 1.5, 2].includes(settings.speed) ? settings.speed : 1
     settings.quality = ['auto', 'high', 'saver'].includes(settings.quality) ? settings.quality : 'auto'
     const mastery = Object.fromEntries(Object.keys(BALLS).map(id => [id, Math.min(MAX_TRIAL, Math.floor(number(parsed.mastery?.[id])))]))

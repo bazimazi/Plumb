@@ -285,6 +285,8 @@ export const game: Dictionary = {
   'Press E to climb back into the pegs': 'E را بزن تا دوباره به میان میخ‌ها برگردی',
   'RICH ×{mult}': 'پربار ‎×{mult}',
   'Reach it or lose 1 shell': 'به آن برس یا 1 پوسته از دست بده',
+  'Miss it: −1 shell': 'نرسی: −1 پوسته',
+  'Every peg within reach pays. Aim for the next one.': 'هر میخِ در دسترس پاداش می‌دهد. سراغ بعدی برو.',
   'Restore 1 shell and take {n} gears.': '1 پوسته ترمیم کن و {n} چرخ‌دنده بگیر.',
   'Restore 2 shell. If already whole, take {n} gears.': '2 پوسته ترمیم کن. اگر سالم است، {n} چرخ‌دنده بگیر.',
   'Rich pocket': 'جیب پربار',

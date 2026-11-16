@@ -37,7 +37,7 @@ export interface RouteOptions {
   loop?: number
   ascension?: number
   /** Version 2 retains the pre-guardian seeded expedition exactly. */
-  rules?: 2 | 3
+  rules?: 2 | 3 | 4
 }
 
 export const ACT_NAMES = ['The Brass Garden', 'The Ember Foundry', 'The Astral Engine'] as const

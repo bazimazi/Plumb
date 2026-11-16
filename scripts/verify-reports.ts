@@ -260,12 +260,14 @@ check('42 generated physical falls preserve the pre-diagnostics event, trajector
   // trajectories are unchanged. Re-baselined again when Prism Core's nudge rose to 1.2 (only Prism
   // trajectories that accept a nudge change). Covers all layouts, all spheres,
   // bare/full builds, accepted control attempts, real reactor use and guardians.
+  // Rules 4 blast relics are excluded so this keeps proving the earlier physics did not move.
+  const BLAST_RELICS = ['powder-heart', 'tinder-box', 'chain-reactor']
   const hash = createHash('sha256')
   for (const layout of ['workshop', 'garden', 'furnace', 'elite', 'ante', 'core', 'grinder'] as LayoutId[]) for (const ball of BALL_LIST) for (let build = 0; build < 2; build++) {
     const b = createBoard({ layout, title: layout, tutorial: false, rng: rngFor('REPORTPHYSICS', `${layout}:${ball.id}:${build}`) })
     if (layout === 'garden') applyEncounter(b, 'bellkeeper')
     if (layout === 'elite') applyEncounter(b, 'heartforge')
-    const p = computeProfile(ball.id, build ? UPGRADE_LIST.map(u => u.id) : [], build ? RELIC_LIST.map(r => r.id) : [])
+    const p = computeProfile(ball.id, build ? UPGRADE_LIST.map(u => u.id) : [], build ? RELIC_LIST.filter(r => !BLAST_RELICS.includes(r.id)).map(r => r.id) : [])
     const d = new Drop(b, ball.id, p, p.integrityMax, p.integrityMax)
     d.launch(build ? 0.225 : -0.135)
     for (let i = 0; i < 14400 && !d.dead && !d.captured; i++) {

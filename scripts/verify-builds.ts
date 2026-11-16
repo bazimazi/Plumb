@@ -443,4 +443,40 @@ check('the Grinder and plain boards have no target; targets grow with depth, tri
   assert.equal(machineTarget({ layout: 'grinder', depth: 10, ascension: 0, loop: 0, payout: 1, boss: true }), 0)
 })
 
+check('a blast peg pays its neighbours once, chains other blasts, and never charges the reactor', () => {
+  const pegs = [peg(400, 400, 'blast'), peg(460, 420), peg(340, 380), peg(400, 480, 'gold'), peg(500, 400, 'blast'), peg(600, 400), peg(760, 400)]
+  const d = make(arena({ pegs }))
+  strike(d, 0)
+  const events = d.pullEvents()
+  assert.equal(d.blasts, 2, 'the second blast is inside the first one\'s reach and chains')
+  assert.ok(d.gone[0] && d.gone[4], 'detonated pegs are consumed')
+  assert.ok(d.lit[1] && d.lit[2] && d.lit[3] && d.lit[5], 'every peg in reach lights')
+  assert.ok(!d.lit[6], 'pegs out of reach stay dark')
+  assert.ok(d.mult > 1, 'gold in the blast still raises the multiplier')
+  assert.equal(events.filter(e => e.type === 'blast' && e.text).length, 2)
+  assert.equal(d.charge, 1 / d.profile.pegsToCharge, 'only the struck blast is a physical contact')
+  assert.equal(events.reduce((sum, e) => sum + (e.points ?? 0), 0), d.earned)
+  const plain = make(arena({ pegs: pegs.map(p => ({ ...p, kind: p.kind === 'blast' ? 'normal' as const : p.kind })) }))
+  strike(plain, 0)
+  assert.ok(d.earned > plain.earned * 3, 'a blast is a big moment')
+})
+
+check('blast relics: Powder Heart reaches farther and adds multiplier, Chain Reactor charges, Tinder Box adds blasts once', () => {
+  const pegs = [peg(400, 400, 'blast'), peg(555, 400), peg(700, 400)]
+  const plain = make(arena({ pegs: pegs.map(p => ({ ...p })) }))
+  strike(plain, 0)
+  const powder = make(arena({ pegs: pegs.map(p => ({ ...p })) }), ['powder-heart'])
+  strike(powder, 0)
+  assert.ok(!plain.lit[1] && powder.lit[1], 'Powder Heart reaches 45% farther')
+  assert.ok(powder.mult >= 1 + 0.2 - 1e-9)
+  const reactor = make(arena({ pegs: pegs.map(p => ({ ...p })) }), ['chain-reactor'])
+  strike(reactor, 0)
+  assert.ok(reactor.charge >= 0.4 + 1 / reactor.profile.pegsToCharge - 1e-9)
+  const board = createBoard({ layout: 'garden', title: 'Tinder', tutorial: false, rng: rngFor('TINDER', 'board') })
+  const before = board.pegs.filter(p => p.kind === 'blast').length
+  make(board, ['tinder-box'])
+  make(board, ['tinder-box'])
+  assert.equal(board.pegs.filter(p => p.kind === 'blast').length, before + 2, 'a board only burns once')
+})
+
 console.log(`${checks} build and physics checks passed.`)

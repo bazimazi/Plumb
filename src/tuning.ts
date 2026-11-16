@@ -57,7 +57,7 @@ export const ECON = {
   oracleDieHigh: 50,
 } as const
 
-export const RESEARCH_ORDER = ['gravity-lens', 'glass-heart', 'ouroboros', 'clockwork-feather', 'flywheel', 'portal-passport', 'clean-contract', 'salvage-crown'] as const
+export const RESEARCH_ORDER = ['gravity-lens', 'glass-heart', 'ouroboros', 'clockwork-feather', 'flywheel', 'portal-passport', 'clean-contract', 'salvage-crown', 'powder-heart', 'chain-reactor', 'tinder-box'] as const
 
 export const STARTER_RELICS = [
   'spring-soul',

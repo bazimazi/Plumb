@@ -2,6 +2,7 @@ import { BALLS, UPGRADES, RELICS, type Tag, type SpecialKind, ballById } from '.
 import { TUNING } from '../tuning'
 import { capitalize } from '../core/math'
 import { OVERDRIVE } from './drop'
+import { BLAST_REACH } from './blast'
 
 export interface Synergy {
   tag: Tag
@@ -57,6 +58,12 @@ export interface Profile {
   comboBonusAt: number
   comboBonusScale: number
   landingBonus: number
+  /** Blast peg reach in world units, multiplier per detonation, Overdrive charge per detonation. */
+  blastReach: number
+  blastMult: number
+  blastCharge: number
+  /** Extra blast pegs a relic adds to each non-boss machine. */
+  extraBlasts: number
   /** Overdrive activations per machine, and distinct contacts needed to charge one. */
   overdriveMax: number
   pegsToCharge: number
@@ -197,6 +204,10 @@ export function computeProfile(ballId: string, upgrades: string[], relics: strin
     comboBonusAt: up.has('compound-interest') ? UPGRADES['compound-interest'].params.combo : 0,
     comboBonusScale: up.has('compound-interest') ? UPGRADES['compound-interest'].params.scale : 1,
     landingBonus: up.has('landing-gear') ? UPGRADES['landing-gear'].params.pay : 0,
+    blastReach: BLAST_REACH * (rel.has('powder-heart') ? RELICS['powder-heart'].params.reach : 1),
+    blastMult: rel.has('powder-heart') ? RELICS['powder-heart'].params.mult : 0,
+    blastCharge: rel.has('chain-reactor') ? RELICS['chain-reactor'].params.charge : 0,
+    extraBlasts: rel.has('tinder-box') ? RELICS['tinder-box'].params.extra : 0,
     overdriveMax: OVERDRIVE.maxUses,
     pegsToCharge: OVERDRIVE.pegsToCharge,
     tags,

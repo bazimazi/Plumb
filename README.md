@@ -11,6 +11,20 @@ PLUMB plays in **Persian (فارسی)** by default and in **English**. Switch in
 - To add a language, add a dictionary folder and register it in `LOCALES` and `DICTS` in `src/i18n/index.ts`.
 - `npm run verify:i18n` fails when a literal `t()` key has no Persian entry, when placeholders differ from the English, or when two dictionaries disagree. Headless checks and the existing browser tests run in English.
 
+## Blast pegs, a living score, targets with teeth · v0.7
+
+Simulated play showed the score target had stopped mattering: a deliberate player landed short of it once in 26 machines, so the meter was decoration and Overdrive's rescue had no job. This version restores that tension, gives each fall a bigger moment to aim for, and puts music under all of it.
+
+- **Targets with teeth:** targets now grow by half their base per machine of depth instead of a third, with layout bases refitted from about 1,000 simulated falls (`src/game/target.ts`). A deliberate player (aims with the preview, nudges away from hazards, saves Overdrive for a short fall) now misses about one machine in eleven and wins Trial 0 a little over half the time; a careless release misses about one in six and wins about one expedition in five. Void Marble, which bounces less, gets targets 10% lower so each sphere misses about as often. The first machine stays gentle.
+- **Blast pegs (rules 4):** an ember-cored peg that detonates when struck. Every peg within its reach pays as if hit (gold still raises the multiplier), blast pegs inside the reach chain, and the sphere is thrown clear. One blast per Act I machine, two from the Foundry on, one more per circuit, never on the Grinder. A dashed ring shows the reach, the aim preview calls out a **blast contact**, and Arc Coil lightning lights the fuse. Lit pegs are not physical contacts, so blasts never charge Overdrive by themselves.
+- **Three new schematics:** **Powder Heart** (blasts reach 45% farther and add +0.2 multiplier), **Chain Reactor** (each detonation adds 40% Overdrive charge) and **Tinder Box** (two more blast pegs in every machine). They join the end of the research order.
+- **Demolition feat:** detonate 10, 25, 63… blast pegs for stardust.
+- **Adaptive music:** a generative score (`src/audio/music.ts`) with its own volume slider. The home screen is a music box, aiming holds a pulse, a fall grooves harder as the chain and multiplier grow, Overdrive opens the filter, a fall heading home short drops to a ticking clock, and the Grinder turns minor. It is synthesized, offline, and in the same key as the peg bells.
+- **Supercharged lap:** after reaching three times the target, the sphere trails a prismatic tail and the music lifts for the rest of the fall.
+- **Route rail:** decision rooms and the desktop machine panel show every station from the Workshop to the Grinder, with the current machine lit.
+- **Fixes:** struck pegs no longer stay displaced from their sockets on slow frames (the recoil spring now runs in fixed substeps); the aiming hint no longer truncates (“Miss it: −1 shell”).
+- **Compatibility:** new expeditions use **rules 4**. Rules 2 and 3 challenge links, checkpoints and logbook replays rebuild their machines without blast pegs, and daily bests are kept per rules version. The 42-fall physics fingerprint still matches once the three new relics are left out, which shows that no earlier physics moved.
+
 ## Fewer scrolls, fuller Persian · v0.6
 
 The interface was rebuilt around one rule: a phone screen should hold the whole decision.

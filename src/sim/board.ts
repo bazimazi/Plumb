@@ -1,5 +1,5 @@
 export type ThemeName = 'workshop' | 'foundry' | 'gravity' | 'grinder'
-export type PegKind = 'normal' | 'reinforced' | 'gold' | 'moving' | 'vanish'
+export type PegKind = 'normal' | 'reinforced' | 'gold' | 'moving' | 'vanish' | 'blast'
 export type BinKind = 'hazard' | 'coin' | 'bonus' | 'jackpot'
 export type LayoutId = 'workshop' | 'garden' | 'furnace' | 'elite' | 'ante' | 'core' | 'grinder'
 export type EncounterId = 'bellkeeper' | 'heartforge'
@@ -88,6 +88,8 @@ export interface Board {
   boss: boolean
   jackpot: boolean
   encounter?: EncounterSpec
+  /** Set once a Tinder Box has added its blast pegs to this board. */
+  tinder?: boolean
   /** Points this machine asks for in one fall. Set by the expedition; 0 or absent means none. */
   target?: number
 }

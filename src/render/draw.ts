@@ -78,7 +78,7 @@ export interface DrawInput {
 const POP_LIFE = 0.28
 const sprites = new Map<string, HTMLCanvasElement>()
 
-type PegLook = 'normal' | 'gold' | 'reinforced'
+type PegLook = 'normal' | 'gold' | 'reinforced' | 'blast'
 
 function pegSprite(pal: Palette, kind: PegLook, lit: boolean): HTMLCanvasElement {
   const key = `${pal.peg}:${pal.accent}:${kind}:${lit ? 1 : 0}`
@@ -96,6 +96,35 @@ function pegSprite(pal: Palette, kind: PegLook, lit: boolean): HTMLCanvasElement
   g.arc(cx + 1, cy + 4, r, 0, Math.PI * 2)
   g.fillStyle = 'rgba(0,0,0,0.35)'
   g.fill()
+  if (kind === 'blast') {
+    // A charcoal shell around a live ember core, with eight vents.
+    const shell = g.createRadialGradient(cx - 5, cy - 6, 2, cx, cy, r + 1)
+    shell.addColorStop(0, '#6b4a3a')
+    shell.addColorStop(0.55, '#3a2420')
+    shell.addColorStop(1, '#170c0b')
+    g.beginPath()
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2
+      const rr = i % 2 ? r - 1.5 : r + 2.5
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr
+      if (!i) g.moveTo(x, y); else g.lineTo(x, y)
+    }
+    g.closePath()
+    g.fillStyle = shell
+    g.fill()
+    g.strokeStyle = '#ff8a3c'
+    g.lineWidth = 1.4
+    g.stroke()
+    const core = g.createRadialGradient(cx, cy, 0, cx, cy, 10)
+    core.addColorStop(0, '#fff6d0')
+    core.addColorStop(0.35, lit ? '#ffd27a' : '#ffb347')
+    core.addColorStop(1, '#e2421a')
+    g.beginPath(); g.arc(cx, cy, 9.5, 0, Math.PI * 2); g.fillStyle = core; g.fill()
+    g.fillStyle = 'rgba(255,255,255,0.55)'
+    g.beginPath(); g.ellipse(cx - 6, cy - 8, 4, 2.4, -0.6, 0, Math.PI * 2); g.fill()
+    sprites.set(key, c)
+    return c
+  }
   const body = g.createRadialGradient(cx - 5, cy - 6, 2, cx, cy, r)
   if (kind === 'gold') {
     body.addColorStop(0, lit ? '#ffffff' : '#fff6d0')
@@ -503,7 +532,8 @@ function drawPegs(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
       alpha = 1 - pop / POP_LIFE
     }
     ctx.globalAlpha = alpha
-    const kind: PegLook = peg.kind === 'gold' || drop.gilded[i] ? 'gold' : peg.kind === 'reinforced' ? 'reinforced' : 'normal'
+    const kind: PegLook = peg.kind === 'blast' ? 'blast' : peg.kind === 'gold' || drop.gilded[i] ? 'gold' : peg.kind === 'reinforced' ? 'reinforced' : 'normal'
+    if (kind === 'blast') drawBlastAura(ctx, pose.x, pose.y, drop.profile.blastReach, input.time + i, alpha)
     // Recessed sockets distinguish the play surface from the polished peg heads.
     ctx.beginPath()
     ctx.arc(pose.x, pose.y + 1, peg.r + 3.5, 0, Math.PI * 2)
@@ -513,7 +543,7 @@ function drawPegs(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
     ctx.lineWidth = 1
     ctx.stroke()
     const sprite = pegSprite(pal, kind, drop.lit[i])
-    const size = peg.r * 3.3 * scale
+    const size = peg.r * 3.3 * scale * (kind === 'blast' ? 1.35 : 1)
     const kick = input.pegKick
     const kx = kick ? kick[i * 4] : 0, ky = kick ? kick[i * 4 + 1] : 0
     ctx.drawImage(sprite, pose.x + kx - size / 2, pose.y + ky - size / 2, size, size)
@@ -565,6 +595,34 @@ function drawPegs(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
       ctx.strokeRect(pose.x - peg.r, pose.y - peg.r, peg.r * 2, peg.r * 2)
     }
   }
+}
+
+/** The live fuse: a breathing ember glow, a slow dashed reach ring, and sparks orbiting the shell. */
+function drawBlastAura(ctx: CanvasRenderingContext2D, x: number, y: number, reach: number, time: number, alpha: number) {
+  const pulse = 0.5 + 0.5 * Math.sin(time * 5)
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  glow(ctx, '#ff7a2a', x, y, 34 + pulse * 10, (0.35 + pulse * 0.25) * alpha)
+  ctx.restore()
+  ctx.save()
+  ctx.globalAlpha = 0.16 * alpha
+  ctx.strokeStyle = '#ffae5c'
+  ctx.lineWidth = 2
+  ctx.setLineDash([6, 10])
+  ctx.lineDashOffset = -time * 14
+  ctx.beginPath()
+  ctx.arc(x, y, reach, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.globalAlpha = (0.6 + pulse * 0.4) * alpha
+  ctx.fillStyle = '#ffe08a'
+  for (let k = 0; k < 3; k++) {
+    const a = time * 2.6 + (k * Math.PI * 2) / 3
+    ctx.beginPath()
+    ctx.arc(x + Math.cos(a) * 21, y + Math.sin(a) * 21, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
 }
 
 function drawBumpers(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: Palette, time: number) {
@@ -869,7 +927,7 @@ function drawPreview(ctx: CanvasRenderingContext2D, input: DrawInput, pal: Palet
     }
     if (target >= 0) {
       const peg = board.pegs[target], p = pegPose(peg, drop.time, 1)
-      const color = peg.kind === 'gold' ? pal.gold : pal.accent
+      const color = peg.kind === 'gold' ? pal.gold : peg.kind === 'blast' ? '#ffae5c' : pal.accent
       const rr = peg.r + drop.ball.r + 8
       ctx.strokeStyle = color; ctx.lineWidth = 2
       for (let k = 0; k < 4; k++) {
@@ -877,7 +935,7 @@ function drawPreview(ctx: CanvasRenderingContext2D, input: DrawInput, pal: Palet
         ctx.beginPath(); ctx.arc(p.x, p.y, rr, a + .2, a + 1.15); ctx.stroke()
       }
       ctx.font = '700 10px ui-monospace, "Vazirmatn Variable", monospace'; ctx.textAlign = 'center'
-      const text = peg.kind === 'gold' ? t('GOLD CONTACT') : t('FIRST CONTACT')
+      const text = peg.kind === 'gold' ? t('GOLD CONTACT') : peg.kind === 'blast' ? t('BLAST CONTACT') : t('FIRST CONTACT')
       const w = ctx.measureText(text).width + 16
       const labelX = Math.max(board.margin + w / 2 + 8, Math.min(board.w - board.margin - w / 2 - 8, p.x))
       let labelY = p.y - rr - 23
@@ -1306,7 +1364,9 @@ function drawShutter(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pa
 function drawBall(ctx: CanvasRenderingContext2D, drop: Drop, trail: string, time: number, motion: boolean) {
   const b = drop.ball
   const surge = drop.overdriveTime > 0
-  const color = surge ? '#ffe9a3' : trail || drop.ballDef.accent
+  // Supercharged (×3 target): the rest of the fall is a victory lap with a prismatic tail.
+  const fever = drop.overcharge >= 2 && !drop.captured && !drop.dead && motion
+  const color = surge ? '#ffe9a3' : fever ? '#ff9fe0' : trail || drop.ballDef.accent
   // A hard dark isolation ring keeps the sphere distinct from illuminated peg heads.
   ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 3, 0, Math.PI * 2)
   ctx.fillStyle = '#020710'; ctx.fill()
@@ -1351,7 +1411,7 @@ function drawBall(ctx: CanvasRenderingContext2D, drop: Drop, trail: string, time
       const k = i / n
       // Teleports never leave a misleading straight line across the whole machine.
       if (Math.hypot(c.x - a.x, c.y - a.y) > 150) continue
-      ctx.strokeStyle = hexAlpha(color, k * (surge ? .75 : .5))
+      ctx.strokeStyle = fever && !surge ? `hsla(${Math.round((time * 300 + i * 22) % 360)},100%,68%,${(k * .8).toFixed(3)})` : hexAlpha(color, k * (surge ? .75 : .5))
       ctx.lineWidth = k * b.r * 1.5
       ctx.beginPath()
       ctx.moveTo(a.x, a.y)

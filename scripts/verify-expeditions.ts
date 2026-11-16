@@ -667,7 +667,7 @@ await check('daily score persists by date and retry keeps daily rules and offers
   finish(f, { dead: true, captured: 'hazard', integrity: 0, hazardThis: 1 })
   click(f, 'skip')
   const day = `${seed.slice(3, 7)}-${seed.slice(7, 9)}-${seed.slice(9, 11)}`
-  assert.equal(f.game.save.dailyBest[`${day}@3`], 321)
+  assert.equal(f.game.save.dailyBest[`${day}@4`], 321)
   click(f, 'retry')
   assert.equal(f.game.run.mode, 'daily')
   assert.equal(f.game.run.seed, seed)
@@ -678,9 +678,10 @@ await check('daily score persists by date and retry keeps daily rules and offers
 
 await check('old checkpoints and shared challenges preserve classic routes while new expeditions add guardians', () => {
   const current = begin()
-  assert.equal(current.game.run.rules, 3)
+  assert.equal(current.game.run.rules, 4)
   current.game.enterNode('gallery')
   assert.equal(current.game.drop.board.encounter.id, 'bellkeeper')
+  assert.ok(current.game.drop.board.pegs.some((p: any) => p.kind === 'blast'), 'rules 4 machines carry blast pegs')
   current.game.checkpoint()
   const data = checkpoint()
   delete data.run.rules
@@ -697,6 +698,11 @@ await check('old checkpoints and shared challenges preserve classic routes while
   assert.equal(modern.game.run.rules, 3)
   modern.game.enterNode('dynamo')
   assert.equal(modern.game.drop.board.encounter.id, 'heartforge')
+  assert.ok(!modern.game.drop.board.pegs.some((p: any) => p.kind === 'blast'), 'rules 3 links rebuild their machines without blast pegs')
+  const blasting = begin({ url: challengeUrl('https://plumb.test/', { seed: 'KEEPOLD', ballId: 'rubber', mode: 'expedition', ascension: 0, rules: 4 }) })
+  assert.equal(blasting.game.run.rules, 4)
+  blasting.game.enterNode('dynamo')
+  assert.equal(blasting.game.drop.board.pegs.filter((p: any) => p.kind === 'blast').length, 2)
 })
 
 await check('physical guardian credit pays once, earns a relic, and never impersonates a Grinder victory', () => {

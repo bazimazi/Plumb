@@ -61,6 +61,9 @@ export interface CoachModel {
   action: string
 }
 
+/** Where this circuit stands: machine depth now and the Grinder's depth. */
+export interface RouteRail { depth: number; total: number; circuit: number }
+
 export interface HudModel {
   gears: number
   score: number
@@ -118,6 +121,7 @@ export interface HudModel {
   encounter?: EncounterModel | null
   coach?: CoachModel | null
   practice?: boolean
+  route?: RouteRail | null
 }
 
 export interface ProgressModel {
@@ -215,7 +219,7 @@ export type StageModel =
   | { kind: 'help' }
   | { kind: 'research'; shards: number; cost: number; study: string; canStudy: boolean; next: { name: string; hint: string; tags: string } | null; researched: number; total: number; seed: string; best: number; runs: number }
   | { kind: 'collection'; balls: CollItem[]; relics: CollItem[]; parts: CollItem[]; challenges: CollItem[]; lore: string[]; pegs: number }
-  | { kind: 'settings'; shake: boolean; particles: boolean; flash: boolean; large: boolean; volume: number; speed: number; haptics?: boolean; hapticsAvailable?: boolean; quality?: 'auto' | 'high' | 'saver'; lang?: string; langs?: { id: string; name: string }[] }
+  | { kind: 'settings'; shake: boolean; particles: boolean; flash: boolean; large: boolean; volume: number; music?: number; speed: number; haptics?: boolean; hapticsAvailable?: boolean; quality?: 'auto' | 'high' | 'saver'; lang?: string; langs?: { id: string; name: string }[] }
   | { kind: 'choices'; kicker: string; title: string; build: string; cards: ChoiceCard[]; skip: string }
   | { kind: 'shop'; gears: number; cards: ChoiceCard[]; reroll: number; canReroll: boolean; build: string; repairCost: number; canRepair: boolean }
   | { kind: 'fork'; title: string; options: ForkCard[] }
@@ -238,13 +242,13 @@ export interface ViewModel {
   hud: HudModel | null
   stage: StageModel
   toast: { title: string; sub: string; big?: boolean } | null
-  flash: '' | 'gold' | 'hurt' | 'core'
+  flash: '' | 'gold' | 'hurt' | 'core' | 'blast'
   /** Title card for a machine that has just slid into place. */
   intro?: { key: number; kicker: string; title: string; target: number; anomaly: string; reward?: string } | null
   /** Gears earned at viewport points, to fly into the wallet. */
   coins?: { x: number; y: number; n: number }[]
   /** Shell and wallet shown above decision rooms, where the playfield HUD is dimmed. */
-  status?: { shell: number; shellMax: number; gears: number; score: number } | null
+  status?: { shell: number; shellMax: number; gears: number; score: number; route?: RouteRail | null } | null
 }
 
 function esc(s: string): string {
@@ -294,6 +298,16 @@ function confetti(count: number, originY = 0.3): void {
     ], { duration: dur, delay: Math.random() * 120, easing: 'cubic-bezier(.2,.6,.4,1)', fill: 'both' })
     anim.onfinish = () => c.remove()
   }
+}
+
+/** A row of stations from the Workshop to the Grinder; the current machine glows. */
+function routeRail(r: RouteRail): string {
+  let html = ''
+  for (let d = 1; d <= r.total; d++) {
+    const state = d < r.depth ? 'done' : d === r.depth ? 'now' : ''
+    html += d === r.total ? `<i class="boss ${state}">${ico('skull')}</i>` : `<i class="${state}"></i>`
+  }
+  return `<span class="route-rail" role="img" aria-label="${esc(t('Machine {n} of {total}', { n: Math.min(r.depth, r.total), total: r.total }))}">${html}</span>`
 }
 
 function pips(on: number, max: number, cls = ''): string {
@@ -420,6 +434,7 @@ export class UI {
       const t = e.target as HTMLInputElement
       if (t.dataset.seed != null) this.onSeed(t.value)
       if (t.dataset.volume != null) this.onAction('volume:' + t.value)
+      if (t.dataset.music != null) this.onAction('music:' + t.value)
     })
     // Cards lean toward the pointer, like a hand of cards being considered.
     stage.addEventListener('pointermove', (e) => {
@@ -553,13 +568,13 @@ export class UI {
   private renderStatus(status: ViewModel['status']): void {
     const el = this.statusEl
     if (!el) return
-    const key = status ? `${status.shell}/${status.shellMax}/${status.gears}/${status.score}/${document.documentElement.lang}` : ''
+    const key = status ? `${status.shell}/${status.shellMax}/${status.gears}/${status.score}/${document.documentElement.lang}/${status.route?.depth ?? ''}` : ''
     if (key === this.statusKey) return
     const prev = this.statusKey.split('/')
     this.statusKey = key
     el.hidden = !status
     if (!status) return
-    el.innerHTML = `<span class="ds-shell" aria-label="${esc(t('Shell {n} of {max}', { n: status.shell, max: status.shellMax }))}">${pips(status.shell, status.shellMax, 'shell-pips')}<em>${status.shell}/${status.shellMax}</em></span><span class="ds-gears" title="${esc(t('Gears'))}">${ico('cog')}<b>${status.gears.toLocaleString('en-US')}</b></span><span class="ds-score" title="${esc(t('Score'))}">${ico('star')}<b>${compact(status.score)}</b></span>`
+    el.innerHTML = `<span class="ds-shell" aria-label="${esc(t('Shell {n} of {max}', { n: status.shell, max: status.shellMax }))}">${pips(status.shell, status.shellMax, 'shell-pips')}<em>${status.shell}/${status.shellMax}</em></span><span class="ds-gears" title="${esc(t('Gears'))}">${ico('cog')}<b>${status.gears.toLocaleString('en-US')}</b></span><span class="ds-score" title="${esc(t('Score'))}">${ico('star')}<b>${compact(status.score)}</b></span>${status.route ? routeRail(status.route) : ''}`
     localize(el)
     if (prev.length > 2) {
       if (Number(prev[0]) !== status.shell) bump(el.querySelector('.ds-shell'), 1.2)
@@ -660,6 +675,7 @@ export class UI {
             <p class="core" data-hud="core"></p>
             <p class="gate" data-hud="jackpot"></p>
             <p class="journey" data-hud="journey"></p>
+            <div class="hud-route" data-hud="route"></div>
             <p class="anomaly" data-hud="anomaly"></p>
             <p class="objective" data-hud="objective"></p>
           </div>
@@ -729,7 +745,7 @@ export class UI {
       const state = boss ? (hud.bossHits ?? 0) >= 5 ? t('The maw is open') : t('Strike the core') : !goal ? '' : hud.short ? t('Short · shell −1') : hud.targetMet
         ? (hud.overcharge ?? 0) >= 2 ? t('Supercharged') : (hud.overcharge ?? 0) >= 1 ? t('Overcharged') : t('Powered')
         : hud.danger ? t('Need {n} more!', { n: Math.max(0, goal - hud.earned).toLocaleString('en-US') })
-          : hud.aiming ? t('Reach it or lose 1 shell') : t('{n} to go', { n: Math.max(0, goal - hud.earned).toLocaleString('en-US') })
+          : hud.aiming ? t('Miss it: −1 shell') : t('{n} to go', { n: Math.max(0, goal - hud.earned).toLocaleString('en-US') })
       set('tm-state', state)
       q('tm-x2')?.classList.toggle('on', (hud.overcharge ?? 0) >= 1)
       q('tm-x3')?.classList.toggle('on', (hud.overcharge ?? 0) >= 2)
@@ -764,6 +780,8 @@ export class UI {
     set('core', hud.core)
     set('jackpot', hud.jackpot)
     set('journey', hud.journey)
+    const routeKey = hud.route ? `${hud.route.depth}/${hud.route.total}/${document.documentElement.lang}` : ''
+    if (this.prev.route !== routeKey) { this.prev.route = routeKey; const r = q('route'); if (r) r.innerHTML = hud.route ? routeRail(hud.route) : '' }
     set('objective', hud.objective)
     set('anomaly', hud.anomaly)
     const muteKey = hud.muted ? 'off' : 'on'
@@ -932,6 +950,8 @@ const ICONS: Record<string, string> = {
   flag: '<path d="M5 2h2v1h11l-2.5 5L18 13H7v9H5V2Z"/>',
   sparkle: '<path d="M12 2c.8 5.5 4.5 9.2 10 10-5.5.8-9.2 4.5-10 10-.8-5.5-4.5-9.2-10-10 5.5-.8 9.2-4.5 10-10Z"/>',
   crown: '<path d="m3 7 5 4 4-7 4 7 5-4-2 12H5L3 7Zm2 14h14v1.5H5V21Z"/>',
+  music: '<path d="M20 3v12.5a3.5 3.5 0 1 1-2-3.2V7.2l-8 1.7v8.6A3.5 3.5 0 1 1 8 14.3V5.6L20 3Z"/>',
+  blast: '<path d="M12 1.5 14 7l5.3-2.3L17 10l5 2-5 2 2.3 5.3L14 17l-2 5.5-2-5.5-5.3 2.3L7 14l-5-2 5-2-2.3-5.3L10 7l2-5.5Zm0 7a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/>',
 }
 
 function ico(name: string, cls = ''): string {
@@ -1195,6 +1215,7 @@ function stageHtml(stage: StageModel): string {
           ${toggle('haptics', stage.hapticsAvailable ? t('Vibration') : t('Vibration (supported phones)'), !!stage.haptics, 'heart')}
         </div>
         <label class="slider">${ico('sound')}<span>${esc(t('Sound'))}</span><input type="range" min="0" max="1" step="0.05" data-volume value="${stage.volume}" /></label>
+        <label class="slider">${ico('music')}<span>${esc(t('Music'))}</span><input type="range" min="0" max="1" step="0.05" data-music value="${stage.music ?? 0.5}" /></label>
         <div class="seg-group"><span>${esc(t('Graphics'))}</span><div class="seg">${(['auto', 'high', 'saver'] as const).map(q => `<button class="${stage.quality === q ? 'on' : ''}" data-act="quality:${q}" aria-pressed="${stage.quality === q}">${esc(q === 'auto' ? t('Auto') : q === 'high' ? t('Sharp') : t('Saver'))}</button>`).join('')}</div><small>${esc(stage.quality === 'saver' ? t('Saver also halves menu frame rate.') : t('Auto lowers resolution when a device struggles.'))}</small></div>
         <div class="seg-group speed-setting"><span>${esc(t('Fall speed'))}</span><div class="seg">${[0.75, 1, 1.5, 2].map(speed => `<button class="${stage.speed === speed ? 'on' : ''}" data-act="speed:${speed}" aria-pressed="${stage.speed === speed}">${speed}×</button>`).join('')}</div><small>${esc(t('More time to react, or a quicker descent. Physics stays the same.'))}</small></div>
         <button class="btn btn-go big settings-done" data-act="back">${ico('check')}<span>${esc(t('Done'))}</span></button>`, { back: 'back', kicker: t('Feel, sound and language') })

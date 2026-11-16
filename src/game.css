@@ -181,6 +181,7 @@ kbd {
 #flash.gold { background: radial-gradient(ellipse at center, #ffc93c14 30%, #ffc93c70 100%); opacity: 1; transition-duration: 40ms; }
 #flash.hurt { background: radial-gradient(ellipse at center, #ff2a4014 35%, #ff2a4080 100%); opacity: 1; transition-duration: 40ms; }
 #flash.core { background: radial-gradient(ellipse at center, #b6ff5a10 35%, #b6ff5a55 100%); opacity: 1; transition-duration: 40ms; }
+#flash.blast { background: radial-gradient(ellipse at center, #ff9a3c10 30%, #ff7a2a66 100%); opacity: 1; transition-duration: 40ms; }
 #debug { position: absolute; left: 8px; bottom: 8px; z-index: 9; padding: 8px; border-radius: 10px; background: #000c; color: #b6ffb0; font: 11px/1.4 monospace; max-width: 260px; }
 #debug button { margin: 4px 4px 0 0; background: #222; color: #d7ffb0; border: 1px solid #465; border-radius: 6px; padding: 4px 6px; }
 
@@ -1388,3 +1389,22 @@ kbd {
 .progress-more .progress-news li { animation: none; }
 /* Report lists show every entry; the fold already keeps them out of the way. */
 .report-cols ol, .report-cols ul { max-height: none; overflow: visible; }
+
+/* Route rail: stations from the Workshop to the Grinder. */
+.route-rail { display: inline-flex; align-items: center; gap: 3px; direction: ltr; }
+.route-rail i { width: 7px; height: 7px; border-radius: 50%; background: #ffffff22; box-shadow: inset 0 0 0 1.5px #ffffff30; flex: none; }
+.route-rail i.done { background: var(--cyan); box-shadow: none; }
+.route-rail i.now { width: 11px; height: 11px; background: var(--gold); box-shadow: 0 0 0 2px var(--line), 0 0 10px #ffd23f; animation: rail-now 1.4s ease-in-out infinite; }
+.route-rail i.boss { width: 15px; height: 15px; display: grid; place-items: center; background: #ff4d5e33; box-shadow: inset 0 0 0 1.5px #ff4d5e88; }
+.route-rail i.boss .ico { width: 10px; height: 10px; fill: #ff8a95; }
+.route-rail i.boss.now { background: #ff4d5e; }
+.route-rail i.boss.now .ico { fill: #fff; }
+@keyframes rail-now { 50% { transform: scale(1.2); } }
+.decision-status .route-rail { padding-inline-start: .5rem; margin-inline-start: .1rem; border-inline-start: 2px solid #ffffff1c; }
+.hud-route { margin: .35rem 0 .15rem; }
+.hud-route .route-rail i { width: 9px; height: 9px; }
+.hud-route .route-rail i.now { width: 13px; height: 13px; }
+.hud-route .route-rail i.boss { width: 18px; height: 18px; }
+.hud-route .route-rail i.boss .ico { width: 12px; height: 12px; }
+@media (max-width: 520px) { .decision-status .route-rail i { width: 5px; height: 5px; } .decision-status .route-rail i.now { width: 8px; height: 8px; } .decision-status .route-rail i.boss { width: 12px; height: 12px; } .decision-status .route-rail { gap: 2px; } }
+@media (prefers-reduced-motion: reduce) { .route-rail i.now { animation: none; } }

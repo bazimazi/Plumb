@@ -5,6 +5,7 @@ import { TUNING } from '../tuning'
 import { t } from '../i18n'
 import { gapCenter, pegPose, shutterWalls, type Board, type BinKind } from './board'
 import type { Profile } from './profile'
+import { BLAST_KICK, BLAST_PAY, boardStream, placeBlasts } from './blast'
 
 export interface Cmd {
   nudge: -1 | 0 | 1
@@ -123,6 +124,8 @@ export class Drop {
   salvageUsed = false
   golds = 0
   pegs = 0
+  /** Blast pegs detonated this fall, chained ones included. */
+  blasts = 0
   coreHits = 0
   coreCd = 0
   wonBoss = false
@@ -199,6 +202,11 @@ export class Drop {
     this.gapT = board.gapStart
     this.gapTarget = board.gapStart
     this.target = board.boss ? 0 : Math.max(0, Math.round(board.target ?? 0))
+    // Tinder Box adds its blasts once per board, so preview ghosts and retries see the same machine.
+    if (profile.extraBlasts && !board.boss && !board.tinder) {
+      board.tinder = true
+      placeBlasts(board, boardStream(board, 7), profile.extraBlasts)
+    }
     const n = board.pegs.length
     this.flashPeg = new Float32Array(n)
     this.vanish = new Float32Array(n)
@@ -743,6 +751,11 @@ export class Drop {
         this.events.push({ type: 'special', x, y, text: this.integrity > before ? t('SALVAGED +1 SHELL') : t('SALVAGED'), big: true })
       }
     }
+    if (peg.kind === 'blast') {
+      this.detonate(i)
+      this.maybeFeather()
+      return
+    }
     const base = gold ? TUNING.goldPay : peg.kind === 'reinforced' ? TUNING.reinforcedPay : TUNING.pegPay
     this.bumpCombo()
     this.pay(x, y, base, gold ? 'gold' : 'peg', gold, true)
@@ -753,6 +766,71 @@ export class Drop {
       this.events.push({ type: 'special', x, y, points: -RELICS['brass-ledger'].params.cost, text: t('INVEST −2'), big: false })
     }
     this.maybeFeather()
+  }
+
+  /**
+   * A blast peg goes off: it pays for itself, then every standing peg within reach pays as if struck
+   * (gold still raises the multiplier), other blast pegs inside the reach chain, and the sphere is
+   * thrown clear. One combo step per detonation, never one per lit peg. The pegs it lights are not
+   * physical contacts, so they never charge Overdrive.
+   */
+  private detonate(i: number, depth = 0): void {
+    if (this.gone[i]) return
+    const c = this.pose(i)
+    this.gone[i] = true
+    this.flashPeg[i] = 1
+    if (!this.lit[i]) {
+      this.lit[i] = true
+      this.litOrder.push(i)
+    }
+    this.blasts += 1
+    this.bumpCombo()
+    this.pay(c.x, c.y, BLAST_PAY, 'blast-pay', true, true)
+    const reach = this.profile.blastReach
+    const chained: number[] = []
+    let lit = 0
+    for (let j = 0; j < this.board.pegs.length; j++) {
+      if (j === i || !this.solid(j)) continue
+      const p = this.pose(j)
+      if (Math.hypot(p.x - c.x, p.y - c.y) > reach) continue
+      const peg = this.board.pegs[j]
+      if (peg.kind === 'blast') { chained.push(j); continue }
+      if (this.payCd[j] > 0) continue
+      this.payCd[j] = 0.6
+      this.flashPeg[j] = 1
+      if (!this.lit[j]) {
+        this.lit[j] = true
+        this.litOrder.push(j)
+      }
+      const gold = peg.kind === 'gold' || this.gilded[j]
+      if (gold) {
+        this.golds += 1
+        this.addMult(0.28 * (peg.kind !== 'gold' ? this.profile.gildMult / 0.28 : 1))
+      }
+      if (peg.kind === 'vanish') this.vanish[j] = 1.45
+      this.pegs += 1
+      lit += 1
+      this.pay(p.x, p.y, gold ? TUNING.goldPay : peg.kind === 'reinforced' ? TUNING.reinforcedPay : TUNING.pegPay, gold ? 'gold' : 'peg', false, true)
+    }
+    if (this.profile.blastMult) this.addMult(this.profile.blastMult)
+    if (this.profile.blastCharge && this.overdriveUses < this.profile.overdriveMax && this.charge < 1) {
+      this.charge = Math.min(1, this.charge + this.profile.blastCharge)
+      this.events.push({ type: 'overdrive-charge', x: c.x, y: c.y })
+      if (this.overdriveReady) this.events.push({ type: 'overdrive-ready', x: c.x, y: c.y, text: t('OVERDRIVE READY'), big: true })
+    }
+    this.events.push({ type: 'blast', x: c.x, y: c.y, text: depth ? t('CHAIN BLAST') : t('BLAST ×{n}', { n: lit }), combo: lit, big: true })
+    const ball = this.ball
+    const dx = ball.x - c.x
+    const dy = ball.y - c.y
+    const d = Math.hypot(dx, dy)
+    if (d < reach) {
+      const k = BLAST_KICK * (1 - d / (reach * 1.6))
+      ball.vx += (dx / (d || 1)) * k
+      ball.vy += (dy / (d || 1)) * k - 120
+      this.squash = 0.45
+      this.clampSpeed()
+    }
+    for (const j of chained) this.detonate(j, depth + 1)
   }
 
   private gildedRow(row: number): boolean {
@@ -835,6 +913,8 @@ export class Drop {
     this.arcPulses += 1
     this.events.push({ type: 'crit', x, y, text: t('CHAIN LIGHTNING'), big: true })
     for (const p of targets.slice(0, spec.targets)) {
+      // Lightning lights the fuse of a blast peg.
+      if (this.board.pegs[p.i].kind === 'blast') { this.detonate(p.i, 1); continue }
       this.lit[p.i] = true
       this.litOrder.push(p.i)
       this.flashPeg[p.i] = 1

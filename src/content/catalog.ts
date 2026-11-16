@@ -285,6 +285,30 @@ export const RELICS: Record<string, RelicDef> = {
     lockHint: 'break it to rebuild it',
     params: { speed: 840, shatters: 4, shell: 1, mult: 0.4 },
   },
+  'powder-heart': {
+    id: 'powder-heart',
+    name: 'Powder Heart',
+    tags: ['destruction', 'multiplier'],
+    text: 'Blast pegs reach 45% farther, and every detonation adds +0.2 multiplier.',
+    lockHint: 'light the fuse',
+    params: { reach: 1.45, mult: 0.2 },
+  },
+  'tinder-box': {
+    id: 'tinder-box',
+    name: 'Tinder Box',
+    tags: ['destruction', 'luck'],
+    text: 'Two more pegs in every machine are blast pegs. The Grinder does not burn.',
+    lockHint: 'leave nothing standing',
+    params: { extra: 2 },
+  },
+  'chain-reactor': {
+    id: 'chain-reactor',
+    name: 'Chain Reactor',
+    tags: ['combo', 'destruction'],
+    text: 'Every detonation adds 40% Overdrive charge, so a blast can arm the reactor.',
+    lockHint: 'feed the reactor fire',
+    params: { charge: 0.4 },
+  },
 }
 
 export const RELIC_LIST = Object.values(RELICS)
@@ -398,6 +422,7 @@ export const PARTS: PartDef[] = [
   { id: 'reinforced', name: 'Reinforced peg', about: 'Pays more, and will not shatter.' },
   { id: 'moving', name: 'Moving peg', about: 'Slides on a track. It can shove you.' },
   { id: 'vanish', name: 'Vanishing peg', about: 'Leaves a hole after a hit, then grows back.' },
+  { id: 'blast', name: 'Blast peg', about: 'Detonates when struck: every peg within reach pays as if hit, and the sphere is thrown clear.' },
   { id: 'bumper', name: 'Bumper', about: 'A kick, not a wall. Time your nudge after it.' },
   { id: 'relay', name: 'Guardian relay', about: 'Strike the numbered targets with the sphere. The Bellkeeper accepts each bell once; the Heartforge follows I → II → I → II. One safe-pocket return keeps progress and resources. Complete the optional objective for gears and a relic.' },
   { id: 'shutter', name: 'Shutter', about: 'One flip each drop. It chooses which lane is open.' },

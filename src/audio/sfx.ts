@@ -49,9 +49,28 @@ export class Sfx {
       this.bus = this.ctx.createGain()
       this.bus.gain.value = 1
       this.bus.connect(comp)
+      this.comp = comp
       comp.connect(this.ctx.destination)
     }
     return this.ctx
+  }
+
+  private comp: DynamicsCompressorNode | null = null
+
+  /**
+   * The running context for the score, or null before the first gesture, while muted, or while
+   * the context is suspended. Music never creates the context itself: browsers only allow audio
+   * after a user gesture, and every gesture path already calls `resume`.
+   */
+  live(): AudioContext | null {
+    if (this.muted || !this.ctx || this.ctx.state !== 'running') return null
+    return this.ctx
+  }
+
+  /** Music shares the compressor with effects, so a loud hit ducks the score instead of clipping. */
+  musicInput(): AudioNode | null {
+    this.ensure()
+    return this.comp
   }
 
   private out(): AudioNode {
@@ -268,6 +287,27 @@ export class Sfx {
     this.noise(0.45, 0.05, 900)
     this.tone(70, 0.5, 'sine', 0.09, 50)
     this.bell(392, 0.4, 0.05, 0.18)
+  }
+
+  /** A blast peg: a low thump, a crackle, and a bright chord that climbs with each chained blast. */
+  blast(chain: number): void {
+    if (this.muted || this.volume <= 0) return
+    const ctx = this.ensure()
+    const t = ctx.currentTime
+    const osc = ctx.createOscillator()
+    const g = ctx.createGain()
+    osc.frequency.setValueAtTime(160, t)
+    osc.frequency.exponentialRampToValueAtTime(38, t + 0.35)
+    g.gain.setValueAtTime(0.22 * this.volume, t)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42)
+    osc.connect(g)
+    g.connect(this.out())
+    osc.start(t)
+    osc.stop(t + 0.45)
+    this.noise(0.32, 0.12, 180)
+    this.noise(0.5, 0.04, 3500, 0.06)
+    const base = 392 * Math.pow(1.5, Math.min(3, chain) * 0.5)
+    ;[0, 7, 12].forEach((s, i) => this.bell(base * Math.pow(2, s / 12), 0.32, 0.05, 0.05 + i * 0.03))
   }
 
   /** A soft warning when a fall is heading home short of its target. */

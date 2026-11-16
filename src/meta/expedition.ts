@@ -1,8 +1,8 @@
 import { BALL_LIST } from '../content/catalog'
 import { hashString, rngFor } from '../core/rng'
 
-export type RulesVersion = 2 | 3
-export const CURRENT_RULES: RulesVersion = 3
+export type RulesVersion = 2 | 3 | 4
+export const CURRENT_RULES: RulesVersion = 4
 
 export const ASCENSIONS = [
   'The original expedition. Three acts, a living build, one Grinder.',
