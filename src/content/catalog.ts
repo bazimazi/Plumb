@@ -103,7 +103,8 @@ export const BALLS: Record<string, BallDef> = {
     friction: 0.16,
     radius: 12.4,
     integrity: 2,
-    nudge: 1,
+    // Fragile, so it steers a little harder: precision is how Prism survives the Grinder.
+    nudge: 1.2,
     launch: 1,
     well: 1,
     special: 'crit',
@@ -224,7 +225,7 @@ export const RELICS: Record<string, RelicDef> = {
     id: 'arc-coil',
     name: 'Arc Coil',
     tags: ['combo', 'multiplier'],
-    text: 'Every 5 combo hits, arc to 3 unlit pegs within 190px. Each pays 4 base points. Max 3 discharges per drop.',
+    text: 'Every 5 combo hits, arc to 3 unlit pegs nearby. Each pays 4 base points. Max 3 discharges per drop.',
     lockHint: '',
     params: { every: 5, targets: 3, radius: 190, pay: 4, max: 3 },
   },

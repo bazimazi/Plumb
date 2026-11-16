@@ -94,6 +94,21 @@ export function source(text: string): string {
   return reverse.get(text) ?? text
 }
 
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹'
+
+/**
+ * Writes numbers with the active language's digits: Persian shows ۱۲٬۳۴۵ and ۱٫۵ instead of 12,345
+ * and 1.5. Digits touching Latin letters (seeds such as HELIX2026, key names) keep their form, so
+ * codes a player may type or share stay exactly as entered.
+ */
+export function digits(text: string): string {
+  if (current !== 'fa' || !/\d/.test(text)) return text
+  return text.replace(/\d+(?:[.,]\d+)*%?/g, (run, offset: number, all: string) => {
+    if (/[A-Za-z]/.test(all[offset - 1] ?? '') || /[A-Za-z]/.test(all[offset + run.length] ?? '')) return run
+    return run.replace(/\d/g, d => FA_DIGITS[Number(d)]).replace(/\./g, '٫').replace(/,/g, '٬').replace('%', '٪')
+  })
+}
+
 /** Joins list items with the active language's comma. */
 export function list(items: string[], sep = ', '): string {
   return items.join(sep === ', ' && isRtl() ? '، ' : sep)

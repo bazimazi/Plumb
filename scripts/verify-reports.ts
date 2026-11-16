@@ -257,7 +257,8 @@ check('reports are pure detached snapshots, survive event drains and never consu
 
 check('42 generated physical falls preserve the pre-diagnostics event, trajectory and accounting fingerprint', () => {
   // Re-baselined when payouts split into points and gears (guardian bounties became currency);
-  // trajectories are unchanged. Covers all layouts, all spheres,
+  // trajectories are unchanged. Re-baselined again when Prism Core's nudge rose to 1.2 (only Prism
+  // trajectories that accept a nudge change). Covers all layouts, all spheres,
   // bare/full builds, accepted control attempts, real reactor use and guardians.
   const hash = createHash('sha256')
   for (const layout of ['workshop', 'garden', 'furnace', 'elite', 'ante', 'core', 'grinder'] as LayoutId[]) for (const ball of BALL_LIST) for (let build = 0; build < 2; build++) {
@@ -276,7 +277,7 @@ check('42 generated physical falls preserve the pre-diagnostics event, trajector
     }
     hash.update(JSON.stringify([layout, ball.id, build, d.time, d.ball, d.integrity, d.earned, d.mult, d.combo, d.captured, d.dead, d.gone, d.coreHits, d.encounterProgress, d.nudges, d.specials, d.tilts, d.flips]))
   }
-  assert.equal(hash.digest('hex'), '6895b0d12aed4673c2d69caea7908c33356dc9776e4a5a0ec1d405e46c9e97dc')
+  assert.equal(hash.digest('hex'), 'c24a548db572ff0464c4b65cd19d1fd55e2e70cca939e4dba09420854877f057')
 })
 
 console.log(`Verified ${checks} report checks, including 42 unchanged full physical falls.`)

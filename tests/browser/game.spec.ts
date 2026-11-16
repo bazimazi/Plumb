@@ -124,10 +124,15 @@ test('hub, seed editor and settings remain usable without external fonts', async
   await expect(page.getByRole('heading', { name: 'PLUMB', exact: true })).toBeVisible()
   await cleanLayout(page)
   await capture(page, info, 'hub')
-  await page.locator('.home-options summary').click()
+  await action(page, 'research').click()
+  await expect(page.locator('.research-screen')).toBeVisible()
+  await cleanLayout(page)
   await page.locator('[data-seed]').fill('MYSEED42')
   await page.locator('[data-seed]').press('Enter')
   await expect(page.locator('#app')).toHaveAttribute('data-mode', 'hub')
+  await expect(page.locator('.research-screen')).toBeVisible()
+  await action(page, 'back').click()
+  await expect(action(page, 'start')).toContainText('MYSEED42')
   await action(page, 'settings').click()
   await action(page, 'speed:0.75').click()
   await expect(action(page, 'speed:0.75')).toHaveAttribute('aria-pressed', 'true')
@@ -164,7 +169,8 @@ test('draft, launch, pause and constellation journal work through real controls'
   await expect(page.locator('.route-act')).toHaveCount(3)
   await cleanLayout(page)
   await capture(page, info, 'journal')
-  await page.locator('.route-heading').scrollIntoViewIfNeeded()
+  await page.locator('.tabs [data-tab="route"]').click()
+  await expect(page.locator('.route-heading')).toBeVisible()
   await page.locator('.route-node.current summary').click()
   await expect(page.locator('.route-node.current')).toHaveAttribute('open', '')
   await capture(page, info, 'constellation-route')
@@ -252,7 +258,7 @@ test('browser and system back step out of every screen like its on-screen contro
   const mode = page.locator('#app')
   const guarded = () => page.evaluate(() => (history.state as { plumbBack?: boolean } | null)?.plumbBack === true)
   // Menus draw over the attract machine, so the app mode stays 'hub'; the open screen is the article.
-  const menus: Record<string, string> = { settings: '.settings-screen', help: '.help-screen', collection: '.collection-screen', history: '.history-screen', stars: '.star-chart' }
+  const menus: Record<string, string> = { settings: '.settings-screen', help: '.help-screen', collection: '.collection-screen', history: '.history-screen', stars: '.star-chart', research: '.research-screen' }
   await page.goto('/')
   await page.goto(`/?seed=${seed}`)
   for (const [name, screen] of Object.entries(menus)) {

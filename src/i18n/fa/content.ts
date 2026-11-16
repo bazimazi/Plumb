@@ -68,7 +68,7 @@ export const content: Dictionary = {
   'At an 8 combo the machine inhales. Physics slows, and you may still nudge.': 'در کمبوی 8، ماشین نفس فرو می‌برد. فیزیک کند می‌شود و همچنان می‌توانی تلنگر بزنی.',
   'the clock skips': 'ساعت می‌پرد',
   'Arc Coil': 'سیم‌پیچ قوس',
-  'Every 5 combo hits, arc to 3 unlit pegs within 190px. Each pays 4 base points. Max 3 discharges per drop.': 'هر 5 ضربهٔ کمبو، قوسی به 3 میخ خاموش در شعاع 190px می‌جهد. هرکدام 4 امتیاز پایه می‌دهد. حداکثر 3 تخلیه در هر سقوط.',
+  'Every 5 combo hits, arc to 3 unlit pegs nearby. Each pays 4 base points. Max 3 discharges per drop.': 'هر 5 ضربهٔ کمبو، قوسی به 3 میخ خاموش در همان نزدیکی می‌جهد. هرکدام 4 امتیاز پایه می‌دهد. حداکثر 3 تخلیه در هر سقوط.',
   'Velvet Fuse': 'فیوز مخملی',
   'Once per drop, ignore a spike without losing combo, or turn a gutter into a coin pocket. Cannot stop the Grinder.': 'در هر سقوط یک بار، بی‌آنکه کمبو را از دست بدهی از یک خار بگذر، یا یک ناودان را به جیب سکه تبدیل کن. جلوی آسیاب را نمی‌گیرد.',
   'Golden Rudder': 'سکان طلایی',
@@ -256,7 +256,7 @@ export const content: Dictionary = {
   '+1 maximum shell.': '+1 حداکثر پوسته.',
   'Overdrive charges from 4 different pegs instead of 5.': 'اوردرایو به‌جای 5 میخ متفاوت، با 4 میخ شارژ می‌شود.',
   'Board payouts +{pct}. Endless; approaches +30%.': 'پرداخت صفحه +{pct}. بی‌پایان؛ به +30% نزدیک می‌شود.',
-  'Rank and mastery XP +{pct}. Endless; approaches +50%.': 'XP رتبه و تسلط +{pct}. بی‌پایان؛ به +50% نزدیک می‌شود.',
+  'Rank and mastery XP +{pct}. Endless; approaches +50%.': 'تجربهٔ رتبه و تسلط +{pct}. بی‌پایان؛ به +50% نزدیک می‌شود.',
   'Stardust income +{pct}. Endless; approaches +50%.': 'درآمد غبار ستاره +{pct}. بی‌پایان؛ به +50% نزدیک می‌شود.',
 
   // Daily and weekly quests

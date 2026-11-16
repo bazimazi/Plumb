@@ -5,7 +5,7 @@ import type { Drop } from '../sim/drop'
 import { drawAstrolabe, drawAtmosphere, drawEngraving } from './atmosphere'
 import type { BallDef } from '../content/catalog'
 import { drawReactor } from './machinery'
-import { t } from '../i18n'
+import { digits, t } from '../i18n'
 
 export interface Particle {
   x: number
@@ -192,8 +192,21 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.roundRect(x, y, w, h, r)
 }
 
+const localized = new WeakSet<CanvasRenderingContext2D>()
+
+/** Canvas text follows the active language's digits, like the DOM does. Patched once per context. */
+function localizeText(ctx: CanvasRenderingContext2D): void {
+  if (localized.has(ctx)) return
+  localized.add(ctx)
+  const fill = ctx.fillText.bind(ctx), stroke = ctx.strokeText.bind(ctx), measure = ctx.measureText.bind(ctx)
+  ctx.fillText = (text: string, x: number, y: number, max?: number) => max === undefined ? fill(digits(text), x, y) : fill(digits(text), x, y, max)
+  ctx.strokeText = (text: string, x: number, y: number, max?: number) => max === undefined ? stroke(digits(text), x, y) : stroke(digits(text), x, y, max)
+  ctx.measureText = (text: string) => measure(digits(text))
+}
+
 export function drawFrame(input: DrawInput): void {
   const { ctx, cssW, cssH, dpr, cam, board } = input
+  localizeText(ctx)
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.globalAlpha = 1
   ctx.globalCompositeOperation = 'source-over'
@@ -389,17 +402,22 @@ function drawBoard(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal:
   ctx.globalCompositeOperation = 'source-over'
 
   drawBall(ctx, drop, input.trailColor, input.time, input.particlesOn)
-  drawChainReadout(ctx, drop, pal)
-  drawFloaters(ctx, input.floaters)
+  // On narrow screens the machine is drawn small; labels keep a readable size on the glass.
+  const legible = Math.min(1.6, Math.max(1, 0.72 / (input.cam.scale * input.cam.zoom)))
+  drawChainReadout(ctx, drop, pal, legible)
+  drawFloaters(ctx, input.floaters, legible)
 }
 
-function drawChainReadout(ctx: CanvasRenderingContext2D, drop: Drop, pal: Palette) {
+function drawChainReadout(ctx: CanvasRenderingContext2D, drop: Drop, pal: Palette, legible = 1) {
   if (drop.combo < 3 || drop.captured || drop.dead) return
   const b = drop.ball
   // One stable, offset readout replaces competing tiny numbers around the sphere.
   const side = b.x > drop.board.w * .65 ? -1 : 1
-  const x = b.x + side * 42
+  const x0 = b.x + side * 42
   ctx.save()
+  // Scale about the readout's anchor so it grows away from the sphere on small screens.
+  ctx.translate(x0, b.y); ctx.scale(legible, legible); ctx.translate(-x0, -b.y)
+  const x = x0
   ctx.textAlign = side > 0 ? 'left' : 'right'
   ctx.textBaseline = 'middle'
   ctx.font = '800 21px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif'
@@ -1067,12 +1085,16 @@ function drawBins(ctx: CanvasRenderingContext2D, board: Board, drop: Drop, pal: 
         ctx.fill()
       }
     }
-    ctx.font = '700 13px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif'
+    const label = binLabel(bin, board, drop)
+    // Collector names stay readable when a phone draws the machine at half size, shrinking only to fit.
+    const want = 13 * Math.min(1.7, Math.max(1, 0.72 / (input.cam.scale * input.cam.zoom)))
+    ctx.font = `800 ${want.toFixed(1)}px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif`
+    const fit = Math.min(1, (x1 - x0 - 10) / Math.max(1, ctx.measureText(label).width))
+    if (fit < 1) ctx.font = `800 ${Math.max(13, want * fit).toFixed(1)}px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.globalAlpha = hot ? 1 : armed ? 0.7 + 0.3 * pulse : 0.65
+    ctx.globalAlpha = hot ? 1 : armed ? 0.75 + 0.25 * pulse : 0.8
     ctx.fillStyle = color
-    const label = binLabel(bin, board, drop)
     textDirection(ctx, label)
     if (x1 - x0 > ctx.measureText(label).width + 10) ctx.fillText(label, mid, top + (bin.kind === 'hazard' ? 54 : 44))
     ctx.globalAlpha = 1
@@ -1438,7 +1460,7 @@ function drawBall(ctx: CanvasRenderingContext2D, drop: Drop, trail: string, time
   }
 }
 
-function drawFloaters(ctx: CanvasRenderingContext2D, floaters: Floater[]) {
+function drawFloaters(ctx: CanvasRenderingContext2D, floaters: Floater[], legible = 1) {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.lineJoin = 'round'
@@ -1446,7 +1468,7 @@ function drawFloaters(ctx: CanvasRenderingContext2D, floaters: Floater[]) {
     const k = 1 - f.life / f.max
     // Elastic entrance: overshoot, settle, then a gentle shrink as it fades.
     const pop = k < 0.22 ? 0.35 + 0.65 * elastic(k / 0.22) : 1 - Math.max(0, k - 0.7) * 0.25
-    const size = (f.size ?? 18) * pop
+    const size = (f.size ?? 18) * pop * legible
     const left = f.life / f.max
     ctx.globalAlpha = left < 0.35 ? left / 0.35 : 1
     ctx.font = `800 ${size.toFixed(1)}px "Fredoka Variable", Fredoka, "Vazirmatn Variable", system-ui, sans-serif`

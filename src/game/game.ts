@@ -471,6 +471,8 @@ export class Game {
     if (this.screen === 'aim' && this.drop) {
       const direction = Number(this.input.keys.has('ArrowRight') || this.input.keys.has('KeyD')) - Number(this.input.keys.has('ArrowLeft') || this.input.keys.has('KeyA'))
       if (direction) { this.mouseAim = false; this.keyboardAim = clamp(this.keyboardAim + direction * dt * 0.7, -this.run!.profile.aimCone, this.run!.profile.aimCone) }
+      // Aiming means the player has read the title card: let it get out of the way.
+      if (this.intro && (direction || Math.abs(this.input.dx) + Math.abs(this.input.dy) > 2)) this.intro.t = Math.min(this.intro.t, 0.3)
       const angle = this.currentAngle()
       this.aimAngle = angle
       this.drop.setAim(angle)
@@ -582,7 +584,7 @@ export class Game {
   }
 
   private menu(): boolean {
-    return ['hub', 'help', 'collection', 'settings', 'history', 'laboratory', 'stars', 'quests'].includes(this.screen)
+    return ['hub', 'help', 'collection', 'settings', 'history', 'laboratory', 'stars', 'quests', 'research'].includes(this.screen)
   }
 
   /** Attract mode only when no fall is in progress, so pause settings keep the live machine. */
@@ -1384,10 +1386,12 @@ export class Game {
     for (const def of FEATS) {
       const claimed = this.save.feats[def.id] ?? 0
       const p = featProgress(def, values[def.id] ?? 0, claimed)
-      for (let tier = claimed; tier < p.tier; tier++) {
-        const dust = featReward(tier)
+      // Several tiers climbed in one run read as one line: the highest tier and their combined reward.
+      let dust = 0
+      for (let tier = claimed; tier < p.tier; tier++) dust += featReward(tier)
+      if (dust) {
         this.save.stardust += dust
-        out.push({ name: `${t(def.name)} ${toRomanTier(tier + 1)}`, dust })
+        out.push({ name: `${t(def.name)} ${toRomanTier(p.tier)}`, dust })
       }
       if (p.tier > claimed) this.save.feats[def.id] = p.tier
     }
@@ -2217,7 +2221,7 @@ export class Game {
             const cost = maxed ? 0 : starCost(node, level)
             return {
               id: node.id, name: t(node.name), glyph: node.glyph, level, max: Number.isFinite(node.max) ? node.max : 0,
-              text: t(node.text(Math.max(1, level))), next: maxed ? '' : t(node.text(level + 1)),
+              text: node.text(Math.max(1, level)), next: maxed ? '' : node.text(level + 1),
               cost, maxed, afford: !maxed && this.save.stardust >= cost, endless: !Number.isFinite(node.max),
             }
           }),
@@ -2226,6 +2230,15 @@ export class Game {
         return this.questsStage()
       case 'help':
         return { kind: 'help' }
+      case 'research': {
+        const next = this.nextSchematic()
+        return {
+          kind: 'research', shards: this.save.shards, cost: next ? this.researchCost() : TUNING.trailCost, study: this.studyLabel(), canStudy: this.canStudy(),
+          next: next ? { name: t(next.name), hint: t(next.text), tags: next.tags.map(tag => t(tag)).join(' · ') } : null,
+          researched: this.save.researched.length, total: RESEARCH_ORDER.length,
+          seed: this.draftSeed, best: this.save.bestScore, runs: this.save.runs,
+        }
+      }
       case 'collection':
         return this.collectionStage()
       case 'settings':
@@ -2599,6 +2612,13 @@ export class Game {
       this.screen = 'help'
       return
     }
+    if (act === 'research') {
+      if (this.screen !== 'hub') return
+      this.returnTo = 'hub'
+      this.screen = 'research'
+      this.sfx.ui()
+      return
+    }
     if (act === 'collection') {
       this.returnTo = this.screen === 'runend' ? 'runend' : 'hub'
       this.screen = 'collection'
@@ -2678,7 +2698,8 @@ export class Game {
     if (act === 'study') return this.study()
     if (act === 'close-reveal') {
       this.reveal = null
-      this.screen = this.returnTo === 'runend' && this.summary ? 'runend' : 'hub'
+      this.screen = this.returnTo === 'runend' && this.summary ? 'runend' : this.returnTo === 'research' ? 'research' : 'hub'
+      if (this.screen === 'research') this.returnTo = 'hub'
       if (this.summary && this.screen === 'runend') {
         const next = this.nextSchematic()
         this.summary.temptation = this.temptation([], next)
@@ -2783,7 +2804,7 @@ export class Game {
       case 'laboratory': this.onAction('lab-exit'); return
       case 'practice-result': this.onAction('lab-configure'); return
       case 'runend': this.onAction('hub'); return
-      case 'help': case 'collection': case 'settings': case 'history': case 'stars': case 'quests':
+      case 'help': case 'collection': case 'settings': case 'history': case 'stars': case 'quests': case 'research':
         this.onAction('back')
         return
       default:

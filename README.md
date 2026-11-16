@@ -11,6 +11,19 @@ PLUMB plays in **Persian (فارسی)** by default and in **English**. Switch in
 - To add a language, add a dictionary folder and register it in `LOCALES` and `DICTS` in `src/i18n/index.ts`.
 - `npm run verify:i18n` fails when a literal `t()` key has no Persian entry, when placeholders differ from the English, or when two dictionaries disagree. Headless checks and the existing browser tests run in English.
 
+## Fewer scrolls, fuller Persian · v0.6
+
+The interface was rebuilt around one rule: a phone screen should hold the whole decision.
+
+- **One-screen phone layouts:** the hub, settings, archive, quests, research, the laboratory, relic drafts, shops, events, forks and every decision room fit a 393 × 851 phone without scrolling, and the hub sheds ornaments (tagline, finish row, tags) on shorter phones instead of scrolling. On desktop no screen scrolls at 1440 × 900.
+- **Tabs instead of long pages:** the Archive (spheres, relics, parts, challenges, fragments), Quests (today, this week, feats) and the run journal (build, guardian or commissions, route) use a segmented tab bar with found/complete counts. Undiscovered archive entries fold into a few grouped hint rows. The journal measured 4,556 px on a phone before; a tab is now about one screen.
+- **Research screen:** shard research and the run seed moved off the hub into their own screen (bottom bar → Research, with a badge when a schematic is affordable). A custom seed shows on the Play button.
+- **Compact cards:** offers put the description under a short header, so three relics fit a phone; on wide screens drafts and shops deal a hand of tall cards with aligned actions. The run summary puts rank progress and actions above the fold; the fall analysis folds on phones and sits beside the summary on desktop. Feat tiers climbed in one run merge into one line, and long news lists fold rather than scroll inside the page.
+- **Persian everywhere:** numbers use Persian digits (۱۲٬۳۴۵, ۱٫۵, ۲۰٪) in the interface and on the machine itself; seeds and key names keep their Latin form. XP reads تجربه and Space reads فاصله. Missing Persian entries for every new string are covered by `verify:i18n`.
+- **Readable glass on phones:** score popups, the chain readout and collector names scale up when a phone draws the machine at half size. The machine's title card sits mid-board, clear of the launcher, and steps aside as soon as you aim. Live notices on phones are a slim banner.
+- **Celebration:** confetti for victories, new bests, rank-ups, schematic reveals and overcharged landings (off with reduced motion).
+- **Balance:** the Workshop (32), Garden (40) and Ante (62) targets were lowered after simulated play showed careless releases missing the first machine one time in five and the Ante one time in four. Prism Core keeps its two-shell fragility but nudges 20% harder; simulated skilled play raised its Grinder core strikes from 3.7 to 4.5 and its win rate from about 25% to 33%.
+
 ## Targets and gears · v0.5
 
 Every fall now answers one question: **did you power the machine?**

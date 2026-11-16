@@ -6,11 +6,11 @@ import type { LayoutId } from '../sim/board'
  * falls: a careless release misses about one target in four, a deliberate one rarely does.
  */
 const LAYOUT_BASE: Record<LayoutId, number> = {
-  workshop: 40,
-  garden: 45,
+  workshop: 32,
+  garden: 40,
   furnace: 105,
   elite: 110,
-  ante: 70,
+  ante: 62,
   core: 72,
   grinder: 0,
 }

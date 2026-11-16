@@ -5,6 +5,7 @@ import { Window } from 'happy-dom'
 import { BALLS, RELICS } from '../src/content/catalog'
 import { COMMISSIONS, MAX_TRIAL, challengeUrl, dailyExpedition, readCheckpoint } from '../src/meta/expedition'
 import { loadSave, writeSave, type SaveData } from '../src/meta/save'
+import { dailyQuests } from '../src/meta/progression'
 import { ECON, RESEARCH_ORDER, TUNING } from '../src/tuning'
 import { Drop } from '../src/sim/drop'
 import { PRACTICE_MACHINES } from '../src/game/laboratory'
@@ -249,15 +250,18 @@ await check('starter draft precedes the first real launch and Canvas renders the
 
 await check('Enter in the seed input edits the seed without starting a run', () => {
   const f = fixture()
+  click(f, 'research')
+  assert.equal(f.game.screen, 'research')
   const input = f.window.document.querySelector('[data-seed]') as any
   input.focus()
   input.value = 'MYSEED42'
   input.dispatchEvent(new f.window.Event('input', { bubbles: true }))
   press(f, 'Enter', input)
-  assert.equal(f.game.screen, 'hub')
+  assert.equal(f.game.screen, 'research')
   assert.equal(f.game.run, null)
   assert.equal(f.game.draftSeed, 'MYSEED42')
   input.blur()
+  click(f, 'back')
   click(f, 'start')
   assert.equal(f.game.run.seed, 'MYSEED42')
 })
@@ -1273,7 +1277,11 @@ await check('quests advance from real drop results, pay once, and never count pr
   const before = f.game.save.stardust
   finish(f, { pegs: 5000, golds: 5000, peakCombo: 99, jackpot: true, overdriveUses: 99, encounterComplete: false, shatters: 99, earned: 99999, nudgeUses: 99 })
   const done = f.game.save.daily.claimed.length
-  assert.ok(done >= 2, 'large real-drop totals complete most daily quests')
+  // Quests are seeded by the UTC date; some (guardians, clean landings, machines, wins) need more than one drop.
+  const oneDrop = new Set(['pegs', 'golds', 'combo', 'jackpots', 'overdrives', 'gears', 'nudges', 'shatters'])
+  const expected = dailyQuests(f.game.save.daily.key).filter(q => oneDrop.has(q.stat)).map(q => q.id)
+  for (const id of expected) assert.ok(f.game.save.daily.claimed.includes(id), `large real-drop totals complete ${id}`)
+  assert.ok(done >= 1, 'large real-drop totals complete at least one daily quest')
   assert.ok(f.game.save.stardust > before)
   const paid = f.game.save.stardust
   f.game.trackDrop(f.game.drop, f.game.run)

@@ -220,7 +220,7 @@ export const game: Dictionary = {
   // Hub, archive, quests
   'Awakens after your first fall.': 'پس از نخستین سقوطت بیدار می‌شود.',
   'Reach the Gravity Core, or finish two falls.': 'به هستهٔ گرانش برس، یا دو سقوط را تمام کن.',
-  '+{dust} stardust · +{xp} XP': '+{dust} غبار ستاره · +{xp} XP',
+  '+{dust} stardust · +{xp} XP': '+{dust} غبار ستاره · +{xp} تجربه',
   'Locked schematic.': 'نقشهٔ قفل‌شده.',
   'In the machine. Not yet offered.': 'در ماشین هست، اما هنوز پیشنهاد نشده.',
   '{name} · won at Trial {n}': '{name} · برده در آزمون {n}',

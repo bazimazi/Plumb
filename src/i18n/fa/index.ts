@@ -12,7 +12,7 @@
  *   drop / fall سقوط · release رها کردن · aim نشانه‌گیری · relic یادگار · upgrade ارتقا
  *   synergy / resonance هم‌نوایی · tag برچسب · anomaly ناهنجاری · expedition سفر · run دور
  *   Trial آزمون · circuit مدار · act پرده · stardust غبار ستاره · shard خرده‌بلور
- *   Star Chart نقشهٔ ستارگان · quest مأموریت · feat دستاورد · rank رتبه · XP XP
+ *   Star Chart نقشهٔ ستارگان · quest مأموریت · feat دستاورد · rank رتبه · XP تجربه
  *   mastery تسلط · finish (cosmetic) پوشش · title عنوان · daily constellation صورت فلکی روزانه
  *   practice تمرین · laboratory آزمایشگاه · archive بایگانی · logbook دفترچهٔ سفر · journal دفتر
  *   commission سفارش · guardian نگهبان · Bellkeeper ناقوس‌بان · Heartforge قلب‌کوره · relay رله
@@ -22,7 +22,7 @@
  * Tags: bounce جهش · multiplier ضریب · gravity گرانش · control کنترل · economy اقتصاد · risk ریسک
  *   portal درگاه · destruction تخریب · combo کمبو · precision دقت · luck شانس · magnet آهنربا
  *
- * Keep brand names, key names (A, D, E, Q, F, V, J, Enter, Esc, Space) and ×/numbers as they are.
+ * Keep brand names, letter key names (A, D, E, Q, F, V, J, Enter, Esc) and ×/numbers as they are; Space is فاصله.
  * Use a zero-width non-joiner (U+200C, ‌) where Persian needs one: می‌شود, چرخ‌دنده.
  */
 import type { Dictionary } from '../index'
