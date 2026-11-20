@@ -154,6 +154,8 @@ export class Game {
   private backGuard = false
   /** True while our own history.back() is in flight to drop the guard. */
   private backUnwinding = false
+  /** When our own history.forward() set off to step back onto the guard; 0 when none is in flight. */
+  private backRestoring = 0
   private suspended: unknown = null
   private hubTick = 0
   private selectedPulse = 0
@@ -274,9 +276,17 @@ export class Game {
       const onGuard = (e.state as { plumbBack?: boolean } | null)?.plumbBack === true
       if (this.backUnwinding) { this.backUnwinding = false; this.backGuard = onGuard; return }
       // Forward navigation re-entered the guard; it is ours again.
-      if (onGuard) { this.backGuard = true; return }
+      if (onGuard) { this.backRestoring = 0; this.backGuard = true; return }
       this.backGuard = false
       this.goBack()
+      // Still off the hub, so back needs a guard again. Step forward onto the one just left rather than pushing
+      // a new one: Chromium, Android WebView included, marks the page entry skippable when an entry is pushed
+      // without a fresh user gesture, and the next back would then skip the whole game and leave or close the app.
+      const nav = (window as { navigation?: { canGoForward?: boolean } }).navigation
+      if (this.screen !== 'hub' && nav?.canGoForward !== false) {
+        this.backRestoring = performance.now()
+        history.forward()
+      }
     })
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && (this.screen === 'aim' || this.screen === 'drop')) {
@@ -2881,6 +2891,9 @@ export class Game {
   /** Keeps exactly one history entry above the page while back has an in-game destination. */
   private syncBackGuard(): void {
     if (this.backUnwinding) return
+    // Wait for the step back onto the guard; if it never lands, fall back to pushing a fresh one.
+    if (this.backRestoring && performance.now() - this.backRestoring < 1000) return
+    this.backRestoring = 0
     const wanted = this.screen !== 'hub'
     if (wanted && !this.backGuard) {
       history.pushState({ plumbBack: true }, '')

@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "PLUMB back probe",
+  "description": "Test only: presses the browser Back button, which skips history entries a page added without a user gesture.",
+  "version": "1",
+  "permissions": ["tabs"],
+  "background": { "service_worker": "sw.js" }
+}
