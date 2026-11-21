@@ -7,11 +7,10 @@ export default defineConfig({
   // Keep Rust compiler output visible when running under `tauri dev`.
   clearScreen: false,
   server: {
-    port: 5174,
-    // Tauri expects the dev server at a fixed URL (see src-tauri/tauri.conf.json).
-    strictPort: true,
+    // No fixed port: Vite picks the next free one. Callers that need a known URL
+    // (Tauri's devUrl, Playwright's webServer) pass `--port 5174 --strictPort` themselves.
     host: host || false,
-    hmr: host ? { protocol: 'ws', host, port: 5174 } : undefined,
+    hmr: host ? { protocol: 'ws', host } : undefined,
     watch: { ignored: ['**/src-tauri/**'] },
   },
   envPrefix: ['VITE_', 'TAURI_ENV_'],

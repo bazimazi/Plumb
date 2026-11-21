@@ -203,7 +203,7 @@ test('practice falls pause, report real results and retry deterministically whil
   await finishFall(page)
   await expect(mode(page)).toHaveAttribute('data-mode', 'practice-result')
   expect(await reportValues(page)).toEqual(first)
-  await expect(page.locator('.practice-comparison')).toContainText('0 points versus your previous attempt')
+  await expect(page.locator('.practice-comparison')).toContainText('0 vs. last attempt')
   expect(await storage(page)).toEqual(before)
   // System back from a result steps up to the bench, like its header back control.
   await page.goBack()

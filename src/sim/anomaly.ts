@@ -10,12 +10,12 @@ export interface AnomalyDef {
 }
 
 export const ANOMALIES: Record<AnomalyId, AnomalyDef> = {
-  gilded: { id: 'gilded', name: 'Midas Array', description: 'Extra gold constellations raise the multiplier. Payouts are 12% richer.' },
-  fading: { id: 'fading', name: 'Fading Constellation', description: 'Ordinary pegs vanish after a hit, opening fresh lines. Payouts are 8% richer.' },
-  springtide: { id: 'springtide', name: 'Spring Tide', description: 'Extra springs return the sphere to the scoring field. Payouts are 8% richer.' },
-  orbital: { id: 'orbital', name: 'Orbital Field', description: 'New gravity wells bend the fall toward unexpected lines. Payouts are 10% richer.' },
-  armored: { id: 'armored', name: 'Crystal Bloom', description: 'More reinforced pegs pay extra and tame hard impacts. Payouts are 10% richer.' },
-  drifting: { id: 'drifting', name: 'Clockwork Drift', description: 'Additional pegs move along gentle tracks. Payouts are 12% richer.' },
+  gilded: { id: 'gilded', name: 'Midas Array', description: 'More gold pegs · +12% points' },
+  fading: { id: 'fading', name: 'Fading Constellation', description: 'Pegs vanish when hit · +8% points' },
+  springtide: { id: 'springtide', name: 'Spring Tide', description: 'More springs · +8% points' },
+  orbital: { id: 'orbital', name: 'Orbital Field', description: 'More gravity wells · +10% points' },
+  armored: { id: 'armored', name: 'Crystal Bloom', description: 'More reinforced pegs · +10% points' },
+  drifting: { id: 'drifting', name: 'Clockwork Drift', description: 'More moving pegs · +12% points' },
 }
 
 /** Mutates and returns this generated board. The boss and its return lanes are protected. */

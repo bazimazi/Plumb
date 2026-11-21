@@ -29,18 +29,18 @@ interface PracticeMachine {
 }
 
 export const PRACTICE_MACHINES: readonly PracticeMachine[] = [
-  { id: 'workshop', name: 'Workshop', text: 'First contacts & the gate', goal: 'Read the first contact, steer toward a useful lane, and finish in a safe collector.', layout: 'workshop', theme: 'workshop' },
-  { id: 'garden', name: 'Glass Garden', text: 'Springs & vanishing teeth', goal: 'Use the spring and vanishing pegs to keep a chain alive. Try a different opening on each attempt.', layout: 'garden', theme: 'workshop' },
-  { id: 'furnace', name: 'Furnace', text: 'Moving pegs & spikes', goal: 'Watch the moving pegs and spend control before a spike or gutter takes shell.', layout: 'furnace', theme: 'foundry' },
-  { id: 'press', name: 'Iron Press', text: 'A demanding descent', goal: 'Inspect the whole machine, then find a line that protects the shell through the foundry.', layout: 'elite', theme: 'foundry' },
-  { id: 'bellkeeper', name: 'Bellkeeper', text: 'Three bells, any order', goal: 'Ring each physical bell once. An unfinished objective grants one safe collector return before 75 seconds.', layout: 'garden', theme: 'workshop', encounter: 'bellkeeper' },
-  { id: 'heartforge', name: 'Heartforge', text: 'I → II → I → II', goal: 'Alternate physical contacts with the left and right relays. Wrong contacts preserve your progress.', layout: 'furnace', theme: 'foundry', encounter: 'heartforge' },
-  { id: 'gravity', name: 'Gravity Core', text: 'Wells & portals', goal: 'Read the gravity wells and portal exits. Aim your interventions toward the next useful contact.', layout: 'core', theme: 'gravity' },
-  { id: 'grinder', name: 'The Grinder', text: 'Five physical core strikes', goal: 'Strike the core five times. Missed collectors cost shell and return you to the fight; use your reserves deliberately.', layout: 'grinder', theme: 'grinder' },
+  { id: 'workshop', name: 'Workshop', text: 'First contacts & the gate', goal: 'Aim, nudge, land safe.', layout: 'workshop', theme: 'workshop' },
+  { id: 'garden', name: 'Glass Garden', text: 'Springs & vanishing teeth', goal: 'Keep the chain alive.', layout: 'garden', theme: 'workshop' },
+  { id: 'furnace', name: 'Furnace', text: 'Moving pegs & spikes', goal: 'Dodge spikes and gutters.', layout: 'furnace', theme: 'foundry' },
+  { id: 'press', name: 'Iron Press', text: 'A demanding descent', goal: 'Protect the shell.', layout: 'elite', theme: 'foundry' },
+  { id: 'bellkeeper', name: 'Bellkeeper', text: 'Three bells, any order', goal: 'Ring each bell once.', layout: 'garden', theme: 'workshop', encounter: 'bellkeeper' },
+  { id: 'heartforge', name: 'Heartforge', text: 'I → II → I → II', goal: 'Alternate left and right.', layout: 'furnace', theme: 'foundry', encounter: 'heartforge' },
+  { id: 'gravity', name: 'Gravity Core', text: 'Wells & portals', goal: 'Ride the wells and portals.', layout: 'core', theme: 'gravity' },
+  { id: 'grinder', name: 'The Grinder', text: 'Five physical core strikes', goal: 'Hit the core 5 times.', layout: 'grinder', theme: 'grinder' },
 ]
 
 export const PRACTICE_BUILDS = [
-  { id: 'stock', name: 'Stock sphere', text: 'Base physics and control reserves.', upgrades: [] as string[], relics: [] as string[] },
+  { id: 'stock', name: 'Stock sphere', text: 'No upgrades.', upgrades: [] as string[], relics: [] as string[] },
   { id: 'control', name: 'Flight controls', text: 'Plumb Line, Capacitor, and Shock Absorber.', upgrades: ['plumb-line', 'capacitor', 'shock-absorber'], relics: [] as string[] },
   { id: 'resonance', name: 'Arc & rudder', text: 'Plumb Line and Capacitor with Arc Coil and Golden Rudder.', upgrades: ['plumb-line', 'capacitor'], relics: ['arc-coil', 'golden-rudder'] },
 ] as const

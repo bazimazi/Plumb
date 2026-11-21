@@ -3,11 +3,11 @@ import type { Board, EncounterId, EncounterSpec } from './board'
 export const ENCOUNTERS: Record<EncounterId, EncounterSpec> = {
   bellkeeper: {
     id: 'bellkeeper', name: 'The Bellkeeper', required: 3, sequence: [], bounty: 25,
-    description: 'Strike all three bells, in any order. Linked bells retract. One safe-pocket return keeps your progress; gutters still cost shell. Complete the relay for 25 gears and a relic.',
+    description: 'Ring 3 bells: +25 gears and a relic.',
   },
   heartforge: {
     id: 'heartforge', name: 'The Heartforge', required: 4, sequence: [0, 1, 0, 1], bounty: 40,
-    description: 'Strike the left and right furnaces in order: I → II → I → II. One safe-pocket return keeps your progress; gutters still cost shell. Complete the relay for 40 gears and a relic.',
+    description: 'Hit I → II → I → II: +40 gears and a relic.',
   },
 }
 

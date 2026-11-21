@@ -27,10 +27,10 @@ const DAMAGE_NAMES: Record<DropDamage['cause'], string> = {
 }
 
 function landing(drop: Drop): string {
-  const names = { coin: 'coin pocket', bonus: 'rich pocket', jackpot: drop.jackpot ? 'jackpot' : 'cold center pocket', hazard: 'gutter' }
+  const names = { coin: 'Safe pocket', bonus: 'Rich pocket', jackpot: drop.jackpot ? 'Jackpot' : 'Cold maw', hazard: 'Gutter' }
   const shell = { integrity: Math.max(0, drop.integrity), max: drop.integrityMax }
-  if (drop.landingKind === 'hazard' && drop.captured === 'coin') return t('A shield converted the gutter into a coin landing. Shell remains {integrity}/{max}.', shell)
-  return drop.captured ? t('The sphere settled in the {pocket} with {integrity}/{max} shell.', { pocket: t(names[drop.captured]), ...shell }) : t('The sphere is still in play.')
+  if (drop.landingKind === 'hazard' && drop.captured === 'coin') return t('Shield saved the gutter · {integrity}/{max} shell', shell)
+  return drop.captured ? t('{pocket} · {integrity}/{max} shell', { pocket: t(names[drop.captured]), ...shell }) : t('Still in play')
 }
 
 /** A detached observation of this fall. Never consumes events or changes the drop. */
@@ -51,72 +51,63 @@ export function describeDrop(drop: Drop): DropReport {
 
   let title: string
   let outcome: DropReport['outcome']
-  let detail: string
   const finalDamage = drop.damageHistory.at(-1)
+  // Short facts joined with " · ": the metrics, objective row and damage list carry the rest.
+  const parts: string[] = []
   if (!drop.launched) {
-    outcome = 'aiming'; title = t('Ready to release'); detail = t('This sphere has not launched.')
+    outcome = 'aiming'; title = t('Ready to release'); parts.push(t('Not launched yet'))
   } else if (!drop.dead && !drop.captured) {
-    outcome = 'in-flight'; title = t('Fall in progress'); detail = t('The sphere is still in play.')
+    outcome = 'in-flight'; title = t('Fall in progress'); parts.push(t('Still in play'))
   } else if (drop.terminalReason === 'timeout') {
     outcome = 'timeout'; title = t('Fall limit reached')
-    detail = drop.board.boss && !drop.wonBoss
-      ? t('The Grinder’s 25-second core-progress limit expired and the final shell was lost.')
-      : t('The 80-second fall limit settled the sphere. {landing}', { landing: landing(drop) })
+    parts.push(drop.board.boss && !drop.wonBoss ? t('Core timer ran out · last shell lost') : t('80s limit'))
+    if (!drop.board.boss || drop.wonBoss) parts.push(landing(drop))
   } else if (drop.terminalReason === 'invalid-state') {
-    outcome = 'invalid-state'; title = t('Fall settled'); detail = t('The fall settled after the sphere left a valid physics state.')
+    outcome = 'invalid-state'; title = t('Fall settled'); parts.push(t('Physics reset the sphere'))
   } else if (drop.dead) {
     outcome = 'shatter'; title = t('Shell broken')
-    detail = finalDamage?.cause === 'spike' ? t('A spike used the remaining shell.')
-      : finalDamage?.cause === 'gutter' ? t('The gutter used the remaining shell.')
-        : finalDamage?.cause === 'grinder-miss' ? t('A Grinder miss used the remaining shell.')
-          : finalDamage?.cause === 'short' ? t('The sphere landed short of the target and the machine took the last shell.') : t('The shell reached zero.')
+    parts.push(finalDamage?.cause === 'spike' ? t('A spike took the last shell')
+      : finalDamage?.cause === 'gutter' ? t('The gutter took the last shell')
+        : finalDamage?.cause === 'grinder-miss' ? t('A Grinder miss took the last shell')
+          : finalDamage?.cause === 'short' ? t('Short of target · last shell lost') : t('Shell gone'))
   } else if (drop.wonBoss) {
-    outcome = 'boss-win'; title = t('The Grinder falls'); detail = t('All five core hits landed. {landing}', { landing: landing(drop) })
+    outcome = 'boss-win'; title = t('The Grinder falls'); parts.push(landing(drop))
   } else if (drop.captured === 'hazard') {
-    outcome = 'gutter'; title = t('Gutter landing'); detail = t('The gutter cost one shell. {landing}', { landing: landing(drop) })
+    outcome = 'gutter'; title = t('Gutter landing'); parts.push(landing(drop))
   } else if (encounter) {
     outcome = drop.encounterComplete ? 'guardian-complete' : 'guardian-unfinished'
     title = drop.encounterComplete ? t('Guardian linked') : t('Guardian unfinished')
-    const linked = t('{name}: {progress}/{required} relays linked.', { name: t(encounter.name), progress: drop.encounterProgress, required: encounter.required })
-    const bounty = drop.encounterComplete
-      ? t('The flat {bounty}-gear guardian bounty was added to your gears.', { bounty: encounter.bounty })
-      : t('This optional objective does not block the route.')
-    detail = `${linked} ${bounty} ${landing(drop)}`
+    parts.push(drop.encounterComplete ? t('+{bounty} gears bounty', { bounty: encounter.bounty }) : t('Optional · the route goes on'), landing(drop))
   } else {
-    outcome = 'landing'; title = drop.jackpot ? t('Jackpot landing') : t('Fall settled'); detail = landing(drop)
+    outcome = 'landing'; title = drop.jackpot ? t('Jackpot landing') : t('Fall settled'); parts.push(landing(drop))
   }
   if (drop.target && drop.captured && !drop.board.boss) {
-    detail += ` ${drop.targetMet ? t('Scored {score} of a {target} target.', { score: drop.earned, target: drop.target }) : t('Scored {score} of a {target} target: {short} short.', { score: drop.earned, target: drop.target, short: drop.target - drop.earned })}`
+    parts.push(drop.targetMet ? t('{score} / {target} target', { score: drop.earned, target: drop.target }) : t('{score} / {target} target · {short} short', { score: drop.earned, target: drop.target, short: drop.target - drop.earned }))
   }
-  if (objective && !['guardian-complete', 'guardian-unfinished', 'boss-win'].includes(outcome)) {
-    const params = { name: objective.name, progress: objective.progress, required: objective.required }
-    detail += ` ${drop.board.boss ? t('{name}: {progress}/{required} core hits.', params) : t('{name}: {progress}/{required} relays linked.', params)}`
-  }
+  const detail = parts.join(' · ')
 
   const tips: string[] = []
   if (objective && !objective.complete) {
     tips.push(drop.board.boss
-      ? t('Five physical core hits open the Grinder’s maw; each miss costs shell.')
+      ? t('Hit the core 5 times. Misses cost shell.')
       : encounter?.sequence.length
-        ? t('The Heartforge accepts alternating I–II–I–II relay contacts.')
-        : t('The Bellkeeper accepts each of its three relays once, in any order.'))
+        ? t('Alternate I → II → I → II.')
+        : t('Ring each bell once, any order.'))
   }
   if (drop.charge >= 1 && drop.overdriveUses < drop.profile.overdriveMax && drop.overdriveTime <= 0) {
-    tips.push(t('The reactor is charged with an activation remaining. E provides a timed lift and scoring surge during a fall.'))
+    tips.push(t('Overdrive was ready and unused.'))
   } else if (drop.nudges > 0) {
-    tips.push(drop.nudges === 1
-      ? t('{n} nudge remains. A / D gives the sphere a short sideways push.', { n: drop.nudges })
-      : t('{n} nudges remain. A / D gives the sphere a short sideways push.', { n: drop.nudges }))
+    tips.push(t(drop.nudges === 1 ? '{n} nudge left unused.' : '{n} nudges left unused.', { n: drop.nudges }))
   }
   if (tips.length < 2 && finalDamage) {
-    tips.push(finalDamage.cause === 'spike' ? t('A spike cost shell during this fall. Inspect its lane before the next release.')
-      : finalDamage.cause === 'gutter' ? t('The gutter cost shell. The machine overview shows its landing pockets.')
-        : finalDamage.cause === 'short' ? t('Falling short of the target cost shell. Overdrive lifts the sphere back into the pegs for more points.')
-          : t('A Grinder miss cost shell. The core-hit count records progress toward opening the maw.'))
+    tips.push(finalDamage.cause === 'spike' ? t('Check the spike lanes before release.')
+      : finalDamage.cause === 'gutter' ? t('Inspect shows the safe pockets.')
+        : finalDamage.cause === 'short' ? t('Short? Overdrive climbs back into the pegs.')
+          : t('Every core hit counts toward the maw.'))
   }
   return {
     title, outcome, detail,
-    advice: tips.slice(0, 2).join(' ') || t('Inspect the machine with V before your next release.'),
+    advice: tips.slice(0, 2).join(' ') || t('Inspect the machine before you release.'),
     elapsed: drop.time,
     earned: drop.earned,
     target: drop.target,

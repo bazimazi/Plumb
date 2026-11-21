@@ -81,113 +81,113 @@ export function createRoute(rng: () => number, options: RouteOptions = {}): { st
 
   add('workshop', 'drop', 'The Workshop', 1, 1, 'workshop', {
     reward: 'upgrade', next: 'fork-lane',
-    blurb: 'Find a line through the brass. Flip toward gold, or keep the calm lane.',
+    blurb: 'Flip the gate toward gold.',
     anomaly: loop > 0 ? anomaly(true) : undefined,
   })
   fork('fork-lane', 'Two ways to wake the Helix', 1, 2, [
-    { title: 'The Garden', detail: 'A gentle spring room without spikes. Choose a relic afterward.', risk: 'safe', next: 'garden' },
-    { title: 'The Furnace', detail: 'Moving pegs, spikes, and richer payouts. Choose a relic afterward.', risk: 'risky', next: 'furnace' },
+    { title: 'The Garden', detail: 'Springs · no spikes', risk: 'safe', next: 'garden' },
+    { title: 'The Furnace', detail: 'Spikes · moving pegs · rich', risk: 'risky', next: 'furnace' },
   ])
   add('garden', 'drop', title(['The Glass Garden', 'The Moss Clock', 'The Conservatory']), 1, 2, 'garden', {
     reward: 'relic', next: 'salvage', anomaly: anomaly(),
-    blurb: 'Vanishing teeth open fresh lanes. The spring gives a line another chance.',
+    blurb: 'Springs and vanishing pegs.',
   })
   add('furnace', 'drop', title(['The Furnace', 'The Cinder Loom', 'The Coal Harp']), 1, 2, 'furnace', {
     risk: 'risky', reward: 'relic', next: 'salvage', anomaly: anomaly(true),
-    blurb: 'The rich lane hides moving pegs and spikes. Spend control before the edges spend shell.',
+    blurb: 'Rich lane, moving pegs, spikes.',
   })
   add('salvage', 'event', 'A voice in the scrap', 1, 3, 'garden', {
     eventId: 'salvage', next: 'fork-brass',
-    blurb: 'A dismantled automaton still has something to trade.',
+    blurb: 'A deal in the scrap.',
   })
   fork('fork-brass', 'Set the rhythm of your build', 1, 3, [
-    { title: 'The Quiet Gallery', detail: 'A forgiving garden. Gather gears while protecting the shell.', risk: 'safe', next: 'gallery' },
-    { title: 'The Golden Kiln', detail: 'A furnace under an anomaly. Take an extra relic.', risk: 'risky', next: 'kiln' },
+    { title: 'The Quiet Gallery', detail: 'Calm · bank gears', risk: 'safe', next: 'gallery' },
+    { title: 'The Golden Kiln', detail: 'Anomaly · extra relic', risk: 'risky', next: 'kiln' },
   ])
   add('gallery', 'drop', title(['The Quiet Gallery', 'The Waterwheel', 'The Brass Choir']), 1, 3, 'garden', {
     next: 'shop-brass', anomaly: anomaly(),
-    blurb: 'Take a breath. Gather gears for the counter and keep the shell whole.',
+    blurb: 'A calm room. Bank gears.',
   })
   add('kiln', 'drop', title(['The Golden Kiln', 'The Ember Vessel', 'The Gilding Press']), 1, 3, 'furnace', {
     risk: 'risky', reward: 'relic', next: 'shop-brass', anomaly: anomaly(true),
-    blurb: 'A relic waits beyond the hot lane. The shell pays for careless greed.',
+    blurb: 'A relic past the hot lane.',
   })
   add('shop-brass', 'shop', 'The Brass Counter', 1, 4, 'garden', { next: 'rest-brass' })
   add('rest-brass', 'repair', 'The Lantern Bench', 1, 4, 'garden', {
-    repairAmount: 99, next: 'press', blurb: 'The keeper restores the entire shell before the next act.',
+    repairAmount: 99, next: 'press', blurb: 'Full shell repair.',
   })
 
   add('press', 'drop', title(['The Press', 'The Iron Cathedral', 'The Tempering Engine']), 2, 4, 'elite', {
     risk: 'risky', reward: 'upgrade', next: 'fork-mid', anomaly: anomaly(),
-    blurb: 'Reinforced teeth and moving lanes test the machine you have built.',
+    blurb: 'Reinforced and moving pegs.',
   })
   fork('fork-mid', 'Choose your fuel', 2, 5, [
-    { title: 'The Cooling Works', detail: 'A spring garden. Bank gears and preserve shell for the next engine.', risk: 'safe', next: 'cooling' },
-    { title: 'The High Forge', detail: 'An elite furnace with a guaranteed anomaly. Earn a relic.', risk: 'risky', next: 'forge' },
+    { title: 'The Cooling Works', detail: 'Springs · calm', risk: 'safe', next: 'cooling' },
+    { title: 'The High Forge', detail: 'Elite · anomaly', risk: 'risky', next: 'forge' },
   ])
   add('cooling', 'drop', title(['The Cooling Works', 'The Verdigris Vault', 'The Steam Garden']), 2, 5, 'garden', {
     next: 'resonance', anomaly: anomaly(),
-    blurb: 'The foundry keeps a quiet garden where the machines cool.',
+    blurb: 'A calm room. Bank gears.',
   })
   add('forge', 'drop', title(['The High Forge', 'The Red Observatory', 'The Hammer Choir']), 2, 5, 'elite', {
     risk: 'risky', reward: 'relic', next: 'resonance', anomaly: anomaly(true),
-    blurb: 'There is a relic in the furnace. Keep enough shell to carry it.',
+    blurb: 'A hard furnace with a relic.',
   })
   add('resonance', 'event', 'The Resonance Chamber', 2, 6, 'furnace', {
-    eventId: 'resonance', next: 'fork-service', blurb: 'The engine listens to the rhythm of your build.',
+    eventId: 'resonance', next: 'fork-service', blurb: 'Trade with the engine.',
   })
   fork('fork-service', 'A debt or a certainty', 2, 6, [
-    { title: 'The Counter', detail: 'Choose visible parts and buy a repair.', risk: 'safe', next: 'shop' },
-    { title: 'The Bargain', detail: 'Trade shell for a relic, buy a blind upgrade, or take scrap.', risk: 'risky', next: 'bargain' },
+    { title: 'The Counter', detail: 'Buy parts · repair', risk: 'safe', next: 'shop' },
+    { title: 'The Bargain', detail: 'Blind trades', risk: 'risky', next: 'bargain' },
   ])
   add('shop', 'shop', 'The Ember Counter', 2, 6, 'furnace', { next: 'dynamo' })
   add('bargain', 'bargain', 'The Bargain', 2, 6, 'furnace', { next: 'dynamo', risk: 'risky' })
   const dynamoLayout: LayoutId = rng() < 0.5 ? 'furnace' : 'elite'
   add('dynamo', 'drop', title(['The Heart Dynamo', 'The Bellows', 'The Solar Crucible']), 2, 6, dynamoLayout, {
     risk: 'risky', next: 'rest-ember', anomaly: anomaly(true),
-    blurb: 'The foundry gives up its last gears before the stars. A full repair waits beyond.',
+    blurb: 'Last gears before the stars.',
   })
   add('rest-ember', 'repair', 'The Starlight Bench', 2, 7, 'core', {
-    repairAmount: 99, next: 'observatory', blurb: 'A full shell for the Astral Engine. Every build gets a fresh chance.',
+    repairAmount: 99, next: 'observatory', blurb: 'Full shell repair.',
   })
 
   add('observatory', 'drop', title(['The Observatory', 'The Lunar Loom', 'The Starfall Archive']), 3, 7, 'core', {
     reward: 'upgrade', next: 'fork-late', anomaly: anomaly(),
-    blurb: 'Gravity wells pull at the line. A portal can turn a descent into another chance.',
+    blurb: 'Wells and portals.',
   })
   fork('fork-late', 'How much is one more machine worth?', 3, 8, [
-    { title: 'Repair the shell', detail: 'Restore two integrity, then enter the Gravity Core.', risk: 'safe', next: 'repair' },
-    { title: 'Jackpot Ante', detail: 'One optional gold room, a relic, and a jackpot at ×3. The edges bite.', risk: 'risky', next: 'ante' },
+    { title: 'Repair the shell', detail: '+2 shell', risk: 'safe', next: 'repair' },
+    { title: 'Jackpot Ante', detail: 'Extra machine · jackpot', risk: 'risky', next: 'ante' },
   ])
   add('repair', 'repair', 'The Moonlit Bench', 3, 8, 'core', {
-    repairAmount: 2, next: 'core', blurb: 'Restore up to two shell before committing to the core.',
+    repairAmount: 2, next: 'core', blurb: 'Repair 2 shell.',
   })
   add('ante', 'drop', title(['The Ante', 'The Golden Eclipse', 'The Last Wager']), 3, 8, 'ante', {
     risk: 'risky', reward: 'relic', next: 'core', anomaly: anomaly(true),
-    blurb: 'An optional machine: gold, spikes, and a jackpot. Riches matter only if the shell survives.',
+    blurb: 'Gold, spikes, jackpot.',
   })
   add('core', 'drop', 'The Gravity Core', 3, 8, 'core', {
     risk: 'risky', reward: 'relic', next: 'oracle', anomaly: anomaly(true),
-    blurb: 'Wells bend the fall. Build a scoring engine from every door and rebound.',
+    blurb: 'Wells bend the fall.',
   })
   add('oracle', 'event', 'The Sleeping Oracle', 3, 9, 'core', {
-    eventId: 'oracle', next: 'fork-horizon', blurb: 'The last keeper offers a choice before the Grinder.',
+    eventId: 'oracle', next: 'fork-horizon', blurb: 'One last trade.',
   })
   fork('fork-horizon', 'The last constellation', 3, 9, [
-    { title: 'The Celestial Garden', detail: 'A gentle final machine. Choose an upgrade.', risk: 'safe', next: 'horizon-safe' },
-    { title: 'The Event Horizon', detail: 'An anomalous gravity engine. Choose one last relic.', risk: 'risky', next: 'horizon' },
+    { title: 'The Celestial Garden', detail: 'Calm', risk: 'safe', next: 'horizon-safe' },
+    { title: 'The Event Horizon', detail: 'Anomaly · gravity', risk: 'risky', next: 'horizon' },
   ])
   add('horizon-safe', 'drop', title(['The Celestial Garden', 'The Silent Astrolabe', 'The Silver Orchard']), 3, 9, 'garden', {
     reward: 'upgrade', next: 'shop-final', anomaly: anomaly(),
-    blurb: 'A quiet final line. Choose what the build still needs.',
+    blurb: 'A calm last room.',
   })
   add('horizon', 'drop', title(['The Event Horizon', 'The Singularity', 'The Black Sun']), 3, 9, 'core', {
     risk: 'risky', reward: 'relic', next: 'shop-final', anomaly: anomaly(true),
-    blurb: 'Take the long way through gravity for one last relic.',
+    blurb: 'Gravity engine. Last relic.',
   })
   add('shop-final', 'shop', 'The Last Counter', 3, 10, 'core', { next: 'grinder' })
   add('grinder', 'boss', 'The Grinder', 3, 10, 'grinder', {
-    risk: 'boss', theme: 'grinder', blurb: 'Break the core. Read its return rhythm, protect the shell, and claim the maw.',
+    risk: 'boss', theme: 'grinder', blurb: 'Hit the core 5 times.',
   })
 
   // Apply new content only after the original route stream has finished. Shared
@@ -195,18 +195,18 @@ export function createRoute(rng: () => number, options: RouteOptions = {}): { st
   // outcomes; v3 adds the optional guardians without moving any existing roll.
   if (options.rules !== 2) {
     nodes.gallery.encounter = 'bellkeeper'
-    nodes.gallery.blurb = 'The Bellkeeper guards three chimes. Strike each for 25 gears and a relic. Linked bells retract; one safe-pocket return preserves progress. Gutters still cost shell.'
+    nodes.gallery.blurb = 'Ring 3 bells: +25 gears and a relic.'
     nodes.kiln.encounter = 'bellkeeper'
-    nodes.kiln.blurb = 'An anomalous Bellkeeper. The relic is guaranteed if you survive; all three chimes pay 25 extra gears. One safe-pocket return preserves progress. Gutters still cost shell.'
+    nodes.kiln.blurb = 'Ring 3 bells: +25 gears. Relic guaranteed.'
     nodes.dynamo.encounter = 'heartforge'
-    nodes.dynamo.blurb = 'The Heartforge answers in pairs: I → II → I → II. Complete its relay for 40 gears and a relic. One safe-pocket return keeps progress; gutters still cost shell. A full repair waits beyond.'
+    nodes.dynamo.blurb = 'Hit I → II → I → II: +40 gears and a relic.'
     for (const option of nodes['fork-brass'].options!) {
       if (option.next === 'gallery') {
         option.title = 'The Bellkeeper’s Garden'
-        option.detail = 'A forgiving relay guardian. Strike three bells for 25 gears and a relic. One safe-pocket return.'
+        option.detail = 'Guardian · 3 bells'
       } else if (option.next === 'kiln') {
         option.title = 'The Bellkeeper’s Kiln'
-        option.detail = 'An anomalous furnace with a guaranteed relic. Complete its three bells for 25 extra gears. One safe-pocket return.'
+        option.detail = 'Guardian · anomaly'
       }
     }
   }

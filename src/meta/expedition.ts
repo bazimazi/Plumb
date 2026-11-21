@@ -5,22 +5,22 @@ export type RulesVersion = 2 | 3 | 4
 export const CURRENT_RULES: RulesVersion = 4
 
 export const ASCENSIONS = [
-  'The original expedition. Three acts, a living build, one Grinder.',
-  'Restless machinery: moving pegs travel 20% farther.',
-  'Lean reserves: one fewer nudge per drop. Previous trials remain.',
-  'Dearer metal: shop prices rise 25%. Previous trials remain.',
-  'Narrow passage: gates are 16% narrower. Previous trials remain.',
-  'Brittle heart: one less maximum shell. Previous trials remain.',
-  'Convergence: every machine has an anomaly. Previous trials remain.',
-  'Short memory: the combo window is 0.15s shorter. Previous trials remain.',
-  'Heavy sky: gravity is 6% stronger. Previous trials remain.',
-  'Thin benches: act benches restore 2 shell instead of all of it. Previous trials remain.',
-  'Single reactor: one Overdrive per machine. Previous trials remain.',
-  'Tight purse: shops cost another 20% and skipped rewards pay nothing. Previous trials remain.',
-  'Restless machinery II: moving pegs travel 25% farther again. Previous trials remain.',
-  'Cold collectors: board payouts fall 15%. Previous trials remain.',
-  'Lean reserves II: one fewer nudge again (never below one). Previous trials remain.',
-  'Eclipse: one less maximum shell again (never below one). Every trial at once.',
+  'The standard expedition.',
+  'Moving pegs travel 20% farther.',
+  '−1 nudge.',
+  'Shops +25%.',
+  'Gates 16% narrower.',
+  '−1 max shell.',
+  'An anomaly in every machine.',
+  'Combo window −0.15s.',
+  'Gravity +6%.',
+  'Benches repair only 2 shell.',
+  'One Overdrive per machine.',
+  'Shops +20%. Skips pay nothing.',
+  'Moving pegs travel 25% farther again.',
+  'Points −15%.',
+  '−1 nudge again.',
+  '−1 max shell again.',
 ] as const
 
 /** Highest Trial a sphere can unlock. */

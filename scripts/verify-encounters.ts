@@ -242,15 +242,15 @@ check('legacy rules retain exact room content while guardian rules preserve topo
       const current = createRoute(() => { newDraws++; return newRng() }, { loop, ascension, rules: 3 })
       assert.equal(oldDraws, newDraws, 'adding guardians consumes no additional RNG draws')
       assert.ok(Object.values(legacy.nodes).every(node => node.encounter === undefined))
-      assert.equal(legacy.nodes.gallery.blurb, 'Take a breath. Gather gears for the counter and keep the shell whole.')
-      assert.equal(legacy.nodes.kiln.blurb, 'A relic waits beyond the hot lane. The shell pays for careless greed.')
-      assert.equal(legacy.nodes.dynamo.blurb, 'The foundry gives up its last gears before the stars. A full repair waits beyond.')
+      assert.equal(legacy.nodes.gallery.blurb, 'A calm room. Bank gears.')
+      assert.equal(legacy.nodes.kiln.blurb, 'A relic past the hot lane.')
+      assert.equal(legacy.nodes.dynamo.blurb, 'Last gears before the stars.')
       const safe = legacy.nodes['fork-brass'].options!.find(o => o.next === 'gallery')!
       const risky = legacy.nodes['fork-brass'].options!.find(o => o.next === 'kiln')!
       assert.equal(safe.title, 'The Quiet Gallery')
-      assert.equal(safe.detail, 'A forgiving garden. Gather gears while protecting the shell.')
+      assert.equal(safe.detail, 'Calm · bank gears')
       assert.equal(risky.title, 'The Golden Kiln')
-      assert.equal(risky.detail, 'A furnace under an anomaly. Take an extra relic.')
+      assert.equal(risky.detail, 'Anomaly · extra relic')
       // Strip only the documented guardian presentation/markers. Everything
       // else, including titles, layouts, branch order and anomalies, is exact.
       const normalized = structuredClone(current)

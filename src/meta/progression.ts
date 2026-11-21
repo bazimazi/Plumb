@@ -129,19 +129,19 @@ export function asymptote(level: number, cap: number, half: number): number {
 }
 
 export const STAR_NODES: StarNode[] = [
-  { id: 'startGears', name: 'Provisions', glyph: '⚙', max: 5, base: 20, growth: 1.5, text: l => t('Begin each expedition with {n} gears.', { n: l * 5 }) },
+  { id: 'startGears', name: 'Provisions', glyph: '⚙', max: 5, base: 20, growth: 1.5, text: l => t('Start with {n} gears.', { n: l * 5 }) },
   { id: 'combo', name: 'Long Fuse', glyph: '∿', max: 5, base: 30, growth: 1.55, text: l => t('Combo window +{n}s.', { n: (l * 0.03).toFixed(2) }) },
-  { id: 'shards', name: 'Shard Lens', glyph: '◆', max: 5, base: 45, growth: 1.6, text: l => t('+{n}% shards from every expedition.', { n: l * 10 }) },
+  { id: 'shards', name: 'Shard Lens', glyph: '◆', max: 5, base: 45, growth: 1.6, text: l => t('+{n}% shards.', { n: l * 10 }) },
   { id: 'discount', name: "Merchant's Favor", glyph: '%', max: 5, base: 40, growth: 1.6, text: l => t('Shop prices −{n}%.', { n: l * 4 }) },
-  { id: 'rerolls', name: 'Loaded Dice', glyph: '↻', max: 2, base: 70, growth: 2.4, text: l => t(l === 1 ? '{n} free shop reroll per shop.' : '{n} free shop rerolls per shop.', { n: l }) },
-  { id: 'repair', name: 'Field Kit', glyph: '+', max: 2, base: 90, growth: 2, text: l => t('Shop shell repair costs −{n}%.', { n: l * 20 }) },
-  { id: 'nudge', name: 'Spare Jet', glyph: '⇆', max: 1, base: 320, growth: 1, text: () => t('+1 nudge in every machine.') },
-  { id: 'draft', name: 'Wide Draft', glyph: '❖', max: 1, base: 360, growth: 1, text: () => t('Starting relic drafts offer a fourth schematic.') },
-  { id: 'shell', name: 'Tempered Shell', glyph: '◯', max: 1, base: 420, growth: 1, text: () => t('+1 maximum shell.') },
-  { id: 'reactor', name: 'Reactor Tuning', glyph: 'ϟ', max: 1, base: 520, growth: 1, text: () => t('Overdrive charges from 4 different pegs instead of 5.') },
-  { id: 'yield', name: 'Stellar Yield', glyph: '✦', max: Infinity, base: 25, growth: 1.13, text: l => t('Board payouts +{pct}. Endless; approaches +30%.', { pct: pct(asymptote(l, 0.3, 15)) }) },
-  { id: 'insight', name: 'Starlight', glyph: '☀', max: Infinity, base: 25, growth: 1.13, text: l => t('Rank and mastery XP +{pct}. Endless; approaches +50%.', { pct: pct(asymptote(l, 0.5, 20)) }) },
-  { id: 'resonance', name: 'Dust Resonance', glyph: '✧', max: Infinity, base: 40, growth: 1.15, text: l => t('Stardust income +{pct}. Endless; approaches +50%.', { pct: pct(asymptote(l, 0.5, 20)) }) },
+  { id: 'rerolls', name: 'Loaded Dice', glyph: '↻', max: 2, base: 70, growth: 2.4, text: l => t(l === 1 ? '{n} free reroll per shop.' : '{n} free rerolls per shop.', { n: l }) },
+  { id: 'repair', name: 'Field Kit', glyph: '+', max: 2, base: 90, growth: 2, text: l => t('Repairs −{n}%.', { n: l * 20 }) },
+  { id: 'nudge', name: 'Spare Jet', glyph: '⇆', max: 1, base: 320, growth: 1, text: () => t('+1 nudge per machine.') },
+  { id: 'draft', name: 'Wide Draft', glyph: '❖', max: 1, base: 360, growth: 1, text: () => t('4 starting relic choices.') },
+  { id: 'shell', name: 'Tempered Shell', glyph: '◯', max: 1, base: 420, growth: 1, text: () => t('+1 max shell.') },
+  { id: 'reactor', name: 'Reactor Tuning', glyph: 'ϟ', max: 1, base: 520, growth: 1, text: () => t('Overdrive charges in 4 pegs, not 5.') },
+  { id: 'yield', name: 'Stellar Yield', glyph: '✦', max: Infinity, base: 25, growth: 1.13, text: l => t('Points +{pct} (up to +30%).', { pct: pct(asymptote(l, 0.3, 15)) }) },
+  { id: 'insight', name: 'Starlight', glyph: '☀', max: Infinity, base: 25, growth: 1.13, text: l => t('XP +{pct} (up to +50%).', { pct: pct(asymptote(l, 0.5, 20)) }) },
+  { id: 'resonance', name: 'Dust Resonance', glyph: '✧', max: Infinity, base: 40, growth: 1.15, text: l => t('Stardust +{pct} (up to +50%).', { pct: pct(asymptote(l, 0.5, 20)) }) },
 ]
 
 export function starNode(id: string): StarNode | undefined {

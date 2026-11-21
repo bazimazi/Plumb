@@ -23,7 +23,7 @@ export default defineConfig({
     { name: 'desktop-firefox', use: { browserName: 'firefox', viewport: { width: 1440, height: 900 } } },
   ],
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1',
+    command: 'npm run dev -- --host 127.0.0.1 --port 5174 --strictPort',
     url: 'http://127.0.0.1:5174',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,

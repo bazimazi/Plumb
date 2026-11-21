@@ -126,7 +126,7 @@ check('spike and gutter losses record their real time and cause; protected conta
   const gutterShield = make(b(), 'rubber', [], ['velvet-fuse']); pocket(gutterShield, 50)
   const report = describeDrop(gutterShield)
   assert.equal(gutterShield.captured, 'coin'); assert.equal(report.outcome, 'landing')
-  assert.match(report.detail, /shield converted the gutter/); assert.deepEqual(report.damage, [])
+  assert.match(report.detail, /Shield saved the gutter/); assert.deepEqual(report.damage, [])
 })
 
 check('Salvage healing never erases a recorded loss or creates false negative damage', () => {
@@ -140,15 +140,15 @@ check('Salvage healing never erases a recorded loss or creates false negative da
 
 check('shell breaks identify spike, gutter and Grinder miss without inventing a boss win', () => {
   const d = make(arena({ zones: [{ kind: 'spike', x: 400, y: 500, r: 25 }] }), 'rubber', [], [], 1)
-  spike(d); assert.equal(describeDrop(d).outcome, 'shatter'); assert.match(describeDrop(d).detail, /spike used the remaining shell/)
+  spike(d); assert.equal(describeDrop(d).outcome, 'shatter'); assert.match(describeDrop(d).detail, /spike took the last shell/)
   const gutter = make(arena(), 'rubber', [], [], 1); pocket(gutter, 50)
-  assert.match(describeDrop(gutter).detail, /gutter used the remaining shell/)
+  assert.match(describeDrop(gutter).detail, /gutter took the last shell/)
   const boss = make(arena({ boss: true }), 'rubber', [], ['velvet-fuse'], 2)
   pocket(boss); assert.equal(boss.dead, false); assert.equal(boss.damageHistory.length, 1)
   assert.equal(boss.shields, 1, 'the shield cannot stop a Grinder miss')
   pocket(boss)
   const report = describeDrop(boss)
-  assert.equal(report.outcome, 'shatter'); assert.match(report.detail, /Grinder miss used the remaining shell/)
+  assert.equal(report.outcome, 'shatter'); assert.match(report.detail, /Grinder miss took the last shell/)
   assert.deepEqual(report.damage.map(e => e.cause), ['Grinder miss', 'Grinder miss'])
   assert.deepEqual(report.objective, { name: 'The Grinder', progress: 0, required: 5, complete: false })
 })
@@ -165,7 +165,7 @@ check('normal and Grinder watchdogs report timeout only when the limit actually 
   assert.equal(describeDrop(boss).outcome, 'in-flight')
   hover(boss, 25.1)
   assert.equal(boss.terminalReason, 'timeout'); assert.equal(describeDrop(boss).outcome, 'timeout')
-  assert.match(describeDrop(boss).detail, /25-second core-progress limit/)
+  assert.match(describeDrop(boss).detail, /Core timer ran out/)
   assert.equal(boss.damageHistory.length, 2)
 })
 
@@ -208,7 +208,7 @@ check('guardian reports describe actual optional completion, finite returns and 
   pocket(incomplete); assert.equal(describeDrop(incomplete).outcome, 'in-flight')
   pocket(incomplete)
   assert.equal(describeDrop(incomplete).outcome, 'guardian-unfinished')
-  assert.match(describeDrop(incomplete).detail, /does not block the route/)
+  assert.match(describeDrop(incomplete).detail, /route goes on/)
   const failed = make(arena({ encounter: { ...ENCOUNTERS.bellkeeper, sequence: [] }, zones: [{ kind: 'spike', x: 400, y: 500, r: 25 }] }), 'rubber', [], [], 1)
   spike(failed); assert.equal(describeDrop(failed).outcome, 'shatter')
 })
@@ -233,10 +233,10 @@ check('advice cites actual unused controls and charged reactor without claiming 
   assert.equal(d.charge, 1)
   pocket(d)
   const report = describeDrop(d)
-  assert.match(report.advice, /reactor is charged with an activation remaining/)
+  assert.match(report.advice, /Overdrive was ready and unused/)
   assert.doesNotMatch(report.advice, /would|could have|prevented|saved you/i)
   const nudge = make(); pocket(nudge)
-  assert.match(describeDrop(nudge).advice, /3 nudges remain/)
+  assert.match(describeDrop(nudge).advice, /3 nudges left unused/)
 })
 
 check('reports are pure detached snapshots, survive event drains and never consult randomness', () => {
